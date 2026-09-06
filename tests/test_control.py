@@ -211,17 +211,39 @@ class TestAxialDeadzone:
 
 
 class TestTankThrottleSource:
+    """tank_throttle conditions its output, so these assert behaviour rather
+    than pass-through: the deadzone applied depends on the input's source."""
+
     def test_triggers_take_precedence_over_stick(self):
-        assert c.tank_throttle(1.0, 0.0, 0.5) == pytest.approx(0.5)
+        # Stick pushed fully forward, trigger only half -- the trigger wins.
+        assert c.tank_throttle(1.0, 0.0, 0.5) < 0.6
 
     def test_left_trigger_reverses(self):
-        assert c.tank_throttle(0.0, 0.8, 0.0) == pytest.approx(-0.8)
+        assert c.tank_throttle(0.0, 0.8, 0.0) < 0
+
+    def test_right_trigger_drives_forward(self):
+        assert c.tank_throttle(0.0, 0.0, 0.8) > 0
 
     def test_both_triggers_cancel(self):
         assert c.tank_throttle(0.0, 0.6, 0.6) == pytest.approx(0.0)
 
+    def test_full_trigger_reaches_full_throttle(self):
+        assert c.tank_throttle(0.0, 0.0, 1.0) == pytest.approx(1.0)
+
     def test_stick_is_the_fallback(self):
-        assert c.tank_throttle(-0.7, 0.0, 0.0) == pytest.approx(-0.7)
+        assert c.tank_throttle(-0.7, 0.0, 0.0) < 0
+        assert c.tank_throttle(0.0, 0.0, 0.0) == 0.0
+
+    def test_triggers_use_a_smaller_deadzone_than_the_stick(self):
+        """A trigger rests at exactly zero, so 12% of its travel is wasted.
+        The same light input should register on a trigger but not a stick."""
+        light = 0.06
+        assert c.tank_throttle(light, 0.0, 0.0) == 0.0        # stick: below 0.12
+        assert c.tank_throttle(0.0, 0.0, light) > 0.0         # trigger: above 0.03
+
+    def test_trigger_response_is_monotonic(self):
+        values = [c.tank_throttle(0.0, 0.0, i / 20) for i in range(21)]
+        assert values == sorted(values)
 
     def test_absolute_mode_ignores_throttle(self):
         with_throttle = c.map_input(0.0, 1.0, c.DriveMode.ABSOLUTE, c.RABBIT, throttle=0.0)

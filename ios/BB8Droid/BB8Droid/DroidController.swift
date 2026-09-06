@@ -103,7 +103,8 @@ final class DroidController {
         // Tank mode throttles on the triggers, falling back to stick Y. Absolute
         // mode ignores the throttle argument — there the stick *is* the command.
         let throttle = Control.tankThrottle(
-            stickY: sample.ly, leftTrigger: sample.lt, rightTrigger: sample.rt
+            stickY: sample.ly, leftTrigger: sample.lt, rightTrigger: sample.rt,
+            profile: state.profile
         )
         state.throttle = throttle
         let command = Control.map(x: sample.lx, y: sample.ly, throttle: throttle,

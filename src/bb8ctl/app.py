@@ -89,7 +89,7 @@ class DriveApp:
 
         # Tank mode throttles on the triggers, falling back to stick Y.
         # Absolute mode ignores it -- there the stick is the command.
-        throttle = control.tank_throttle(sample.ly, sample.lt, sample.rt)
+        throttle = control.tank_throttle(sample.ly, sample.lt, sample.rt, self.profile)
         command = control.map_input(
             sample.lx, sample.ly, self.mode, self.profile, self.state.heading, dt,
             throttle=throttle,

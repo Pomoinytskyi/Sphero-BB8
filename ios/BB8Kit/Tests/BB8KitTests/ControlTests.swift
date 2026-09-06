@@ -161,23 +161,53 @@ final class ControlTests: XCTestCase {
 
     // MARK: - Throttle source
 
+    // tankThrottle conditions its output, so these assert behaviour rather than
+    // pass-through: the deadzone applied depends on the input's source.
+
     /// Triggers are analog and squeezed against spring tension, which holds a
     /// speed far better than balancing a thumbstick.
     func testTriggersTakePrecedenceOverStick() {
-        XCTAssertEqual(Control.tankThrottle(stickY: 1, leftTrigger: 0, rightTrigger: 0.5), 0.5)
+        // Stick fully forward, trigger only half — the trigger wins.
+        XCTAssertLessThan(Control.tankThrottle(stickY: 1, leftTrigger: 0, rightTrigger: 0.5), 0.6)
     }
 
     func testLeftTriggerReverses() {
-        XCTAssertEqual(Control.tankThrottle(stickY: 0, leftTrigger: 0.8, rightTrigger: 0), -0.8)
+        XCTAssertLessThan(Control.tankThrottle(stickY: 0, leftTrigger: 0.8, rightTrigger: 0), 0)
+    }
+
+    func testRightTriggerDrivesForward() {
+        XCTAssertGreaterThan(Control.tankThrottle(stickY: 0, leftTrigger: 0, rightTrigger: 0.8), 0)
     }
 
     func testBothTriggersCancel() {
         XCTAssertEqual(Control.tankThrottle(stickY: 0, leftTrigger: 0.6, rightTrigger: 0.6), 0)
     }
 
+    func testFullTriggerReachesFullThrottle() {
+        XCTAssertEqual(Control.tankThrottle(stickY: 0, leftTrigger: 0, rightTrigger: 1),
+                       1, accuracy: 1e-9)
+    }
+
     /// The on-screen controller and anyone who prefers the stick still work.
     func testStickIsTheFallbackWhenTriggersAreIdle() {
-        XCTAssertEqual(Control.tankThrottle(stickY: -0.7, leftTrigger: 0, rightTrigger: 0), -0.7)
+        XCTAssertLessThan(Control.tankThrottle(stickY: -0.7, leftTrigger: 0, rightTrigger: 0), 0)
+        XCTAssertEqual(Control.tankThrottle(stickY: 0, leftTrigger: 0, rightTrigger: 0), 0)
+    }
+
+    /// A trigger rests at exactly zero, so 12% of its travel is wasted on a
+    /// stick-sized deadzone. The same light input should register on a trigger
+    /// but not on a stick.
+    func testTriggersUseASmallerDeadzoneThanTheStick() {
+        let light = 0.06
+        XCTAssertEqual(Control.tankThrottle(stickY: light, leftTrigger: 0, rightTrigger: 0), 0)
+        XCTAssertGreaterThan(Control.tankThrottle(stickY: 0, leftTrigger: 0, rightTrigger: light), 0)
+    }
+
+    func testTriggerResponseIsMonotonic() {
+        let values = (0 ... 20).map {
+            Control.tankThrottle(stickY: 0, leftTrigger: 0, rightTrigger: Double($0) / 20)
+        }
+        XCTAssertEqual(values, values.sorted())
     }
 
     /// Absolute mode is a direction vector — the throttle argument is irrelevant

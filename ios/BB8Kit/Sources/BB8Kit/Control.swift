@@ -20,11 +20,21 @@ public enum Control {
         public let expo: Double
         /// Degrees/second of heading change at full deflection, tank mode.
         public let turnRate: Double
+        /// Thumbstick deadzone. Sticks rest off-centre and drift with wear.
         public let deadzone: Double
+        /// Trigger deadzone — much smaller.
+        ///
+        /// A trigger rests at exactly zero and returns there mechanically, so it
+        /// needs only enough to reject noise. Reusing the stick's 12% here throws
+        /// away the first eighth of the pull, which is precisely the range where
+        /// fine speed control lives.
+        public let triggerDeadzone: Double
 
-        public init(name: String, cap: Int, expo: Double, turnRate: Double, deadzone: Double = 0.12) {
+        public init(name: String, cap: Int, expo: Double, turnRate: Double,
+                    deadzone: Double = 0.12, triggerDeadzone: Double = 0.03) {
             self.name = name; self.cap = cap; self.expo = expo
             self.turnRate = turnRate; self.deadzone = deadzone
+            self.triggerDeadzone = triggerDeadzone
         }
     }
 
@@ -108,9 +118,19 @@ public enum Control {
     /// against spring tension rather than balanced, and they free the thumb to
     /// do nothing but steer. Stick Y still works for anyone who prefers it, and
     /// for the on-screen controller.
-    public static func tankThrottle(stickY: Double, leftTrigger: Double, rightTrigger: Double) -> Double {
+    ///
+    /// Conditioning happens **here**, not in `mapTank`, because the right
+    /// deadzone depends on which control the value came from — and only this
+    /// function knows that.
+    public static func tankThrottle(
+        stickY: Double, leftTrigger: Double, rightTrigger: Double,
+        profile: SpeedProfile = tortoise
+    ) -> Double {
         let fromTriggers = rightTrigger - leftTrigger
-        return abs(fromTriggers) > 0.02 ? fromTriggers : stickY
+        if abs(fromTriggers) > profile.triggerDeadzone {
+            return axialDeadzone(fromTriggers, profile.triggerDeadzone)
+        }
+        return axialDeadzone(stickY, profile.deadzone)
     }
 
     /// Stick direction is world direction.
@@ -137,11 +157,14 @@ public enum Control {
     /// Turn rate is integrated over `dt` so steering feel is frame-rate
     /// independent — otherwise the droid turns faster simply because the control
     /// loop ran quicker.
+    /// - Parameter throttle: already conditioned by `tankThrottle`. Passing a
+    ///   raw axis here works too — full deflection is full deflection — but the
+    ///   deadzone will not have been applied.
     public static func mapTank(
         steer: Double, throttle: Double, profile: SpeedProfile, heading: Int, dt: Double
     ) -> DriveCommand {
         let steerInput = axialDeadzone(steer, profile.deadzone)
-        let throttleInput = axialDeadzone(throttle, profile.deadzone)
+        let throttleInput = throttle
         var newHeading = Int(Double(heading) + steerInput * profile.turnRate * dt)
 
         guard throttleInput != 0 else {

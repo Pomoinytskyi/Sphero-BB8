@@ -29,7 +29,13 @@ class SpeedProfile:
     expo: float
     #: Degrees/second of heading change at full stick deflection, tank mode.
     turn_rate: float
+    #: Thumbstick deadzone. Sticks rest off-centre and drift with wear.
     deadzone: float = 0.12
+    #: Trigger deadzone -- much smaller. A trigger rests at exactly zero and
+    #: returns there mechanically, so it needs only enough to reject noise.
+    #: Reusing the stick's 12% throws away the first eighth of the pull, which
+    #: is precisely where fine speed control lives.
+    trigger_deadzone: float = 0.03
 
 
 #: Default. Indoors, near furniture, and while aiming.
@@ -128,15 +134,25 @@ def apply_expo(magnitude: float, expo: float) -> float:
     return magnitude**expo
 
 
-def tank_throttle(stick_y: float, left_trigger: float, right_trigger: float) -> float:
+def tank_throttle(
+    stick_y: float, left_trigger: float, right_trigger: float,
+    profile: "SpeedProfile | None" = None,
+) -> float:
     """Throttle for tank mode: triggers, with the stick as a fallback.
 
     Triggers win when either is pressed. They are analog, they are squeezed
     against spring tension rather than balanced, and they free the thumb to do
     nothing but steer.
+
+    Conditioning happens **here**, not in :func:`map_tank`, because the right
+    deadzone depends on which control the value came from -- and only this
+    function knows that.
     """
+    profile = profile or TORTOISE
     from_triggers = right_trigger - left_trigger
-    return from_triggers if abs(from_triggers) > 0.02 else stick_y
+    if abs(from_triggers) > profile.trigger_deadzone:
+        return axial_deadzone(from_triggers, profile.trigger_deadzone)
+    return axial_deadzone(stick_y, profile.deadzone)
 
 
 def map_absolute(x: float, y: float, profile: SpeedProfile) -> DriveCommand:
@@ -171,7 +187,8 @@ def map_tank(
     control loop ran quicker.
     """
     steer_input = axial_deadzone(steer, profile.deadzone)
-    throttle_input = axial_deadzone(throttle, profile.deadzone)
+    # Already conditioned by tank_throttle, which knows the input's source.
+    throttle_input = throttle
     new_heading = int(heading + steer_input * profile.turn_rate * dt) % 360
 
     if throttle_input == 0.0:
