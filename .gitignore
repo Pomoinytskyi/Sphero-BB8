@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+captures/*.jsonl
+!captures/demo-session.jsonl
+.DS_Store

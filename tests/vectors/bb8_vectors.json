@@ -1,0 +1,53 @@
+{
+  "note": "Golden vectors for the BB-8 v1 codec. The Swift port must reproduce these byte-for-byte.",
+  "handshake": [
+    {
+      "uuid": "22bb746f-2bbd-7554-2d6f-726568705327",
+      "hex": "3031316933"
+    },
+    {
+      "uuid": "22bb746f-2bb2-7554-2d6f-726568705327",
+      "hex": "07"
+    }
+  ],
+  "characteristics": {
+    "wake": "22bb746f-2bbf-7554-2d6f-726568705327",
+    "tx_power": "22bb746f-2bb2-7554-2d6f-726568705327",
+    "anti_dos": "22bb746f-2bbd-7554-2d6f-726568705327",
+    "command": "22bb746f-2ba1-7554-2d6f-726568705327",
+    "response": "22bb746f-2ba6-7554-2d6f-726568705327"
+  },
+  "packets": {
+    "roll_100_90": "fffe0230050664005a010003",
+    "roll_full_0": "fffe02300006ff00000100c7",
+    "stop": "fffe023006060000000000c1",
+    "calibrate_180": "fffe023001060000b4020010",
+    "set_heading_0": "fffe020107030000f2",
+    "main_led_red": "fffe02200804ff0000d2",
+    "back_led_full": "fffe02210202ffd9",
+    "motion_timeout_2000": "fffe0234030307d0ec",
+    "stabilization_on": "fffe0202040201f4",
+    "ping": "ffff00010901f4",
+    "power_state": "ffff00200a01d4"
+  },
+  "sensor_masks": {
+    "drive_preset": [
+      "yaw",
+      "speed",
+      "locator_x",
+      "locator_y",
+      "velocity_x",
+      "velocity_y"
+    ],
+    "primary": 65536,
+    "extended": 230686720,
+    "field_order": [
+      "yaw",
+      "locator_x",
+      "locator_y",
+      "velocity_x",
+      "velocity_y",
+      "speed"
+    ]
+  }
+}
