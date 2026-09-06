@@ -9,8 +9,9 @@ transcription rather than a reverse-engineering project.
 
 ## Status
 
-Milestones 1 and 2 complete — **172 tests, all passing, none requiring the droid.**
-Milestone 3 needs one hardware session; see [docs/06 §5](docs/06-implementation-plan.md).
+**Step 1 complete.** Verified on hardware 2026-09-06 against BB-D36B: driven with
+an Xbox controller for 47 s, 358 drive commands across 237 distinct headings, peak
+105 cm/s, ~2.2 m travelled, **zero errors**. 183 tests, none requiring the droid.
 
 | Component | State |
 |---|---|
@@ -20,7 +21,25 @@ Milestone 3 needs one hardware session; see [docs/06 §5](docs/06-implementation
 | Control math, drive models, speed profiles | Done |
 | Transmitter (single-slot cell) | Done |
 | Gamepad, control loop, TUI | Done |
-| Probe suite | Written, **awaiting hardware** |
+| Probe suite | Done, **hardware-verified** |
+| Aim mode (`ROLL` mode 2) | Implemented, **not yet exercised on hardware** |
+
+### What the hardware told us
+
+| Measurement | Result |
+|---|---|
+| `SOP2=0xFE` unacknowledged | **Honoured** — 50 packets, 0 replies |
+| BLE write-without-response | **89.2 pkt/s** ceiling |
+| BLE write-with-response | 16.7 pkt/s (59.8 ms) |
+| Acknowledged round-trip | median 69 ms |
+| Sensor streaming | 0% loss at 4/8/16 Hz |
+| Sensor rate parameter | **400 Hz divisor**, not milliseconds |
+
+spherov2's 60 ms "firmware safe interval" turns out to be the BLE
+write-with-response round trip, not a firmware limit — the with-response ceiling
+measures 59.8 ms, that constant almost exactly. Switching to write-without-response
+is a 5.3x throughput gain, which makes the planned iOS light show free rather than
+something that has to compete with driving.
 
 ## Quick start
 

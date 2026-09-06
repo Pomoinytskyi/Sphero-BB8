@@ -114,11 +114,23 @@ class DriveApp:
             self._handle_edges(self.gamepad.edges(sample), sample)
             self.step(sample, dt)
 
+    #: Battery refresh period. Slow on purpose -- it costs an acknowledged
+    #: round trip, and BB-8 does not flatten in thirty seconds.
+    BATTERY_PERIOD = 30.0
+
+    async def battery_loop(self) -> None:
+        """Keep the battery reading fresh, and double as a liveness probe."""
+        while not self.quit_requested:
+            await asyncio.sleep(self.BATTERY_PERIOD)
+            if self.state.ready:
+                await self.session.read_power()
+
     async def run(self) -> None:
         """Run until quit, then shut down through the single exit path (A11)."""
         try:
             async with asyncio.TaskGroup() as tg:
                 tg.create_task(self.tx.run())
+                tg.create_task(self.battery_loop())
                 tg.create_task(self._until_quit())
         finally:
             self.tx.stop()

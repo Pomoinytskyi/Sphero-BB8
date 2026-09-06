@@ -177,3 +177,66 @@ class TestStateTracking:
         await task
         assert state.traffic.sent > 0
         assert state.traffic.packets_per_sec >= 0
+
+
+class TestPacing:
+    async def test_period_absorbs_send_time_rather_than_adding_to_it(self, rig):
+        """Sleeping `interval` then working makes the real period
+        `interval + work`. Measured on hardware that was 13.9 Hz against a
+        30 Hz target, because a BLE write costs about as long as the sleep.
+        """
+        session, _, tx = rig
+        tx.interval = 0.02
+
+        original = session.transport.send
+        async def slow_send(data, **kwargs):
+            await asyncio.sleep(0.01)      # simulate a costly write
+            await original(data, **kwargs)
+        session.transport.send = slow_send
+
+        task = asyncio.create_task(tx.run())
+        start = asyncio.get_running_loop().time()
+        for i in range(120):
+            tx.set_drive(DriveCommand(speed=(i % 80) + 1, heading=i % 360))
+            await asyncio.sleep(0.002)
+        elapsed = asyncio.get_running_loop().time() - start
+        tx.stop()
+        await task
+
+        rate = len(rolls(session)) / elapsed
+        # Fixed-sleep pacing would give ~33 Hz here (20ms + 10ms). Deadline
+        # pacing should stay near the 50 Hz target.
+        assert rate > 40, f"pacing only achieved {rate:.1f} Hz"
+
+    async def test_does_not_burst_to_catch_up_after_a_stall(self, rig):
+        """A deadline scheme that replays missed ticks would fire a burst at
+        the droid the moment it recovers. Resync instead of catching up."""
+        session, _, tx = rig
+        tx.interval = 0.01
+
+        stamps: list[float] = []
+        original = session.transport.send
+        async def timed_send(data, **kwargs):
+            stamps.append(asyncio.get_running_loop().time())
+            await original(data, **kwargs)
+        session.transport.send = timed_send
+
+        task = asyncio.create_task(tx.run())
+        tx.set_drive(DriveCommand(speed=10, heading=0))
+        await asyncio.sleep(0.03)
+
+        # Stall the loop well past several deadlines.
+        await asyncio.sleep(0)
+        import time as _time
+        _time.sleep(0.08)
+
+        for i in range(20):
+            tx.set_drive(DriveCommand(speed=i + 20, heading=i))
+            await asyncio.sleep(0.004)
+        tx.stop()
+        await task
+
+        gaps = [b - a for a, b in zip(stamps, stamps[1:])]
+        # Recovery must not produce a run of near-zero gaps.
+        tiny = [g for g in gaps if g < tx.interval * 0.3]
+        assert len(tiny) <= 2, f"burst detected: {len(tiny)} packets crammed together"

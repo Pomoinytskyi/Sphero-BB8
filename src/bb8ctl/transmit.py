@@ -13,6 +13,7 @@ accumulate (constraints A2, N3).
 from __future__ import annotations
 
 import asyncio
+import time
 
 from bb8ctl import protocol
 from bb8ctl.control import CommandKind, DriveCommand
@@ -107,11 +108,30 @@ class Transmitter:
         return command != self._last_sent
 
     async def run(self) -> None:
-        """Fixed-cadence drain: urgent, then drive, then one background item."""
+        """Fixed-cadence drain: urgent, then drive, then one background item.
+
+        Paced against a *deadline*, not by sleeping a fixed interval. Sleeping
+        ``interval`` and then working makes the real period ``interval + work``,
+        which measured 13.9 Hz against a 30 Hz target -- the BLE write costs
+        roughly as long again as the sleep. Advancing a deadline absorbs the
+        work time instead of adding to it.
+
+        (This is the same mistake the first rate probe made: pacing around a
+        blocking operation rather than through it.)
+        """
         self._running = True
+        deadline = time.monotonic()
         try:
             while self._running:
-                await asyncio.sleep(self.interval)
+                deadline += self.interval
+                delay = deadline - time.monotonic()
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                else:
+                    # Fell behind: resync rather than sprinting to catch up,
+                    # which would burst packets at the droid.
+                    deadline = time.monotonic()
+                    await asyncio.sleep(0)
                 sent_drive = False
 
                 command = self._cell

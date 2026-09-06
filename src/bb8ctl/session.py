@@ -181,6 +181,10 @@ class Session:
         await self.send(protocol.set_back_led(64, seq=self._next_seq()), reliable=True)
         await self.send(protocol.configure_collision_detection(seq=self._next_seq()), reliable=True)
 
+        # Read the battery once at connect so the panel is populated from the
+        # start rather than sitting on a dash until something else asks.
+        await self.read_power()
+
         if stream:
             primary, extended = sensors.build_masks(stream)
             self._masks = (primary, extended)
@@ -190,6 +194,24 @@ class Session:
                     mask=primary, count=0, extended_mask=extended, seq=self._next_seq(),
                 )
             )
+
+    async def read_power(self) -> float | None:
+        """Query battery voltage and cache it on shared state.
+
+        Payload layout verified on hardware: ``[0]`` record version, ``[1]``
+        power state, ``[2:4]`` centivolts, ``[4:6]`` charge count.
+        """
+        try:
+            response = await self.request(protocol.get_power_state, timeout=2.0)
+        except Exception:  # noqa: BLE001
+            return None
+        data = response.data
+        if len(data) < 4:
+            return None
+        self.state.battery_v = int.from_bytes(data[2:4], "big") / 100
+        if data[1] in (3, 4):  # low / critical
+            self.state.log("battery", f"{self.state.battery_v:.2f} V -- low")
+        return self.state.battery_v
 
     async def stop_droid(self) -> None:
         """Best-effort halt. Never raises -- it runs on the shutdown path."""
