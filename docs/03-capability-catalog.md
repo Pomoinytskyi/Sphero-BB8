@@ -3,9 +3,9 @@
 **Source-derived** from `spherov2` 0.12.1 (`commands/sphero.py`, `commands/core.py`,
 `toy/sphero.py`, `controls/v1.py`) cross-read against the Sphero API 1.20 framing.
 
-> ⚠️ Every row is marked with a verification state. `SRC` = read from a working
-> library but **not yet confirmed against your BB-8**. Hardware confirmation is the
-> outstanding work in this phase and requires the droid awake and charged.
+> ✅ **Hardware-verified 2026-09-06** against BB-D36B (firmware `011e010445480006`,
+> 8.07 V, 31 charge cycles). Capture: `captures/probe-20260906-101816.jsonl`,
+> 427 frames. Results in §10; corrections folded into the tables below.
 
 ---
 
@@ -86,8 +86,12 @@ visual reference for aiming.
 ## 5. Sensors — streaming
 
 `SET_DATA_STREAMING` (`0x11`) with
-`interval(2) samples(2) mask(4) count(1) ext_mask(4)`.
-Effective rate ≈ `400 / interval_ms` Hz. `count=0` streams indefinitely, `mask=0` stops.
+`divisor(2) samples(2) mask(4) count(1) ext_mask(4)`.
+
+> **The first word is a DIVISOR of a 400 Hz clock, not a period in milliseconds.**
+> Rate = `400 / divisor`. Measured: divisor 100 → 4.01 Hz, 50 → 8.01 Hz,
+> 25 → 15.96 Hz — all within 0.25%. Reading it as milliseconds understates the
+> rate by 25x. `count=0` streams indefinitely, `mask=0` stops.
 
 ### Primary mask
 
@@ -182,3 +186,64 @@ System Settings → Privacy & Security → Bluetooth.
 This matters for step 2 as well: an iOS app must declare
 `NSBluetoothAlwaysUsageDescription` in its Info.plist or it will be killed the same
 way, with the same absence of diagnostics.
+
+
+---
+
+## 10. Hardware verification results (2026-09-06)
+
+Droid `BB-D36B`, firmware `011e010445480006`, 8.07 V, 31 charge cycles.
+Run: `bb8ctl probe` → `captures/probe-20260906-101816.jsonl` (427 frames).
+
+### Answers to the Phase 2 §8 open questions
+
+| # | Question | Answer |
+|---|---|---|
+| 1 | Does BB-8 honour `SOP2=0xFE`? | **YES.** 50 unacknowledged packets sent, **0 replies.** |
+| 2 | True inter-packet floor? | **Not yet answered** — the first rate stage measured the wrong thing (see below). Fastest spacing observed: **36.9 ms**. |
+| 3 | Can `SET_MAIN_LED` and `ROLL` interleave? | **YES.** 21 LED packets alternating with ROLL, **0 errors.** |
+| 4 | Max reliable stream rate? | **≥16 Hz with zero loss.** Limited by divisor, not by the link. |
+| 5 | Does `SET_MOTION_TIMEOUT` fire? | Sent and accepted; droid stopped unattended. |
+| 6 | What does `ROLL` mode 2 do? | Accepted; rotates heading reference. |
+
+### Verified constants
+
+- `GET_POWER_STATE` payload: `[0]` record version, `[1]` power state
+  (1=charging, 2=OK, 3=low, 4=critical), `[2:4]` **centivolts**, `[4:6]` charge
+  count, `[6:8]` seconds since charge.
+- Sensor sample clock: **400 Hz**, parameter is a divisor.
+- `DRIVE_PRESET` decodes correctly: 6 int16 fields, 12-byte payload, `dlen=13`.
+
+### Measured performance
+
+| Metric | Value |
+|---|---|
+| Acknowledged round-trip latency | min 66.8 ms, **median 69 ms**, max 120 ms |
+| Achieved acknowledged rate | **8.3 Hz** |
+| Fastest TX spacing observed | 36.9 ms |
+| Sensor stream loss | **0%** at 4, 8 and 16 Hz |
+
+The 8.3 Hz acknowledged rate confirms the Phase 1 prediction almost exactly: an
+acknowledge-everything design like spherov2's caps out near 8 commands/sec.
+
+### Three probe defects found by this run
+
+1. **Battery parsed one byte early** — sliced `[1:3]` instead of `[2:4]`, reporting
+   5.15 V for an 8.07 V pack and flagging a healthy battery as flat.
+2. **Sensor expectations assumed milliseconds** — computed `1000/param` instead of
+   `400/param`, so a stream with *zero* loss was reported at 40% delivery. The
+   consistent ~41% across all three rates was the clue: congestion is not that tidy.
+3. **The rate stage measured the wrong quantity** — it slept the target interval
+   *after* a blocking acknowledged round-trip, so achieved spacing was always
+   (latency + interval). It never exceeded ~11 Hz, then reported "20 ms sustainable,
+   50 Hz" as though the target had been met.
+
+All three are fixed; the rate stage now measures achieved unacknowledged throughput.
+
+### Outstanding: BLE write mode
+
+`0xFE` removes the *application*-layer acknowledgement, but the run used BLE
+**write-with-response**, which still costs a link-layer round trip per write —
+the likely cause of the ~37-60 ms floor. `bb8ctl probe --no-response` uses
+write-without-response and should be the next measurement. If it lifts throughput
+materially, the §6 N1 command budget stops being a constraint at all.

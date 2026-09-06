@@ -195,3 +195,40 @@ class TestPortability:
 
         allowed = {"__future__", "dataclasses", "enum", "typing"}
         assert imported <= allowed, f"non-stdlib or I/O imports leaked in: {imported - allowed}"
+
+
+class TestSensorStreamingRate:
+    """The streaming parameter is a divisor of a 400 Hz clock, NOT a period.
+
+    Verified on hardware: divisor 100 -> 4.01 Hz, 50 -> 8.01 Hz, 25 -> 15.96 Hz,
+    all within 0.25% of 400/divisor. Reading it as milliseconds understates the
+    rate by 25x and makes a healthy stream look like 60% packet loss.
+    """
+
+    def test_divisor_to_hz_matches_hardware_measurements(self):
+        assert p.divisor_to_hz(100) == pytest.approx(4.0)
+        assert p.divisor_to_hz(50) == pytest.approx(8.0)
+        assert p.divisor_to_hz(25) == pytest.approx(16.0)
+
+    def test_hz_to_divisor_round_trips(self):
+        for hz in (1.0, 4.0, 8.0, 16.0, 20.0, 50.0):
+            assert p.divisor_to_hz(p.hz_to_divisor(hz)) == pytest.approx(hz, rel=0.05)
+
+    def test_divisor_is_never_zero(self):
+        """Zero would mean 'stop streaming', not 'stream fast'."""
+        assert p.hz_to_divisor(10_000) >= 1
+
+    def test_divisor_fits_the_u16_field(self):
+        assert p.hz_to_divisor(0.001) <= 0xFFFF
+
+    def test_divisor_is_encoded_as_the_first_data_word(self):
+        pkt = p.set_data_streaming(divisor=25, samples_per_packet=1, mask=0x10000, seq=1)
+        assert pkt[6:8] == (25).to_bytes(2, "big")
+
+    def test_streaming_command_is_acknowledged(self):
+        """Setup command -- worth knowing whether the droid accepted it."""
+        assert p.set_data_streaming(divisor=100, samples_per_packet=1, mask=1)[1] == 0xFF
+
+    def test_zero_mask_stops_the_stream(self):
+        pkt = p.set_data_streaming(divisor=0, samples_per_packet=0, mask=0)
+        assert pkt[10:14] == bytes(4)

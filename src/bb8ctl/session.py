@@ -162,7 +162,7 @@ class Session:
         state.link_detail = ""
         state.log("connected", state.droid_address or "")
 
-    async def configure(self, *, stream: tuple[str, ...] | None = None, interval_ms: int = 100) -> None:
+    async def configure(self, *, stream: tuple[str, ...] | None = None, stream_hz: float = 10.0) -> None:
         """Connect-time setup, as one idempotent unit.
 
         Deliberately a single replayable step so reconnection is a *replay*
@@ -179,7 +179,7 @@ class Session:
             self._masks = (primary, extended)
             await self.send(
                 protocol.set_data_streaming(
-                    interval_ms=interval_ms, samples_per_packet=1,
+                    divisor=protocol.hz_to_divisor(stream_hz), samples_per_packet=1,
                     mask=primary, count=0, extended_mask=extended, seq=self._next_seq(),
                 )
             )

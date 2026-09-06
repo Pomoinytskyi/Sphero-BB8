@@ -290,15 +290,33 @@ def configure_locator(x: int = 0, y: int = 0, yaw_tare: int = 0, flags: int = 1,
     )
 
 
+#: The firmware's sensor sample clock. The streaming command takes a *divisor*
+#: of this, not a period -- verified on hardware to within 0.25% (divisor 100 ->
+#: 4.01 Hz, 50 -> 8.01 Hz, 25 -> 15.96 Hz). Naming it "interval_ms" costs a
+#: factor of 25 in stream rate, which is exactly the kind of mistake the Swift
+#: port must not repeat.
+SENSOR_BASE_HZ = 400.0
+
+
+def hz_to_divisor(hz: float) -> int:
+    """Nearest divisor giving approximately ``hz`` samples/second."""
+    return max(1, min(0xFFFF, round(SENSOR_BASE_HZ / hz)))
+
+
+def divisor_to_hz(divisor: int) -> float:
+    return SENSOR_BASE_HZ / divisor if divisor else 0.0
+
+
 def set_data_streaming(
-    interval_ms: int, samples_per_packet: int, mask: int, count: int = 0, extended_mask: int = 0, seq: int = 0
+    divisor: int, samples_per_packet: int, mask: int, count: int = 0, extended_mask: int = 0, seq: int = 0
 ) -> bytes:
     """Start (or stop, with ``mask=0``) async sensor streaming.
 
-    ``interval_ms`` is divided into a 400 Hz base clock by the firmware, so the
-    effective rate is ``400 / interval_ms`` Hz. ``count=0`` streams forever.
+    :param divisor: divides :data:`SENSOR_BASE_HZ`. Rate is ``400 / divisor`` Hz.
+        Use :func:`hz_to_divisor` rather than passing a period in milliseconds.
+    :param count: ``0`` streams indefinitely.
     """
-    data = _u16(interval_ms) + _u16(samples_per_packet) + int(mask).to_bytes(4, "big") + bytes([count])
+    data = _u16(divisor) + _u16(samples_per_packet) + int(mask).to_bytes(4, "big") + bytes([count])
     data += int(extended_mask).to_bytes(4, "big")
     return build(Did.SPHERO, SpheroCmd.SET_DATA_STREAMING, seq, data, answer=True)
 

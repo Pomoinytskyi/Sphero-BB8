@@ -21,6 +21,10 @@ from bb8ctl import protocol, sensors
 from bb8ctl.session import Session
 
 
+#: GET_POWER_STATE byte [1]. Verified: a healthy BB-8 reports 2.
+POWER_STATES = {1: "charging", 2: "battery OK", 3: "battery low", 4: "battery critical"}
+
+
 @dataclass
 class Check:
     name: str
@@ -77,13 +81,22 @@ class Prober:
         try:
             response = await self.session.request(protocol.get_power_state)
             data = response.data
-            # Byte 1 is the state code; bytes 2-3 are battery centivolts.
-            voltage = int.from_bytes(data[1:3], "big") / 100 if len(data) >= 3 else 0.0
+            # GET_POWER_STATE payload, verified on hardware:
+            #   [0] record version  [1] power state  [2:4] centivolts
+            #   [4:6] charge count  [6:8] seconds since charge
+            # (An earlier version sliced [1:3] and reported 5.15 V for an 8.07 V
+            # pack -- an off-by-one that looked like a flat battery.)
+            state_code = data[1] if len(data) > 1 else 0
+            voltage = int.from_bytes(data[2:4], "big") / 100 if len(data) >= 4 else 0.0
+            charges = int.from_bytes(data[4:6], "big") if len(data) >= 6 else 0
             self.session.state.battery_v = voltage
-            self._record(Check("power state", True, f"{voltage:.2f} V", {"volts": voltage}))
-            if 0 < voltage < 7.0:
-                self._record(Check("battery healthy", False,
-                                   "low voltage -- charge before trusting drive tests"))
+            label = POWER_STATES.get(state_code, f"unknown({state_code})")
+            self._record(Check("power state", True, f"{voltage:.2f} V, {label}, {charges} charges",
+                               {"volts": voltage}))
+            # BB-8 carries a 2-cell pack: ~8.4 V full, ~7.0 V is genuinely low.
+            self._record(Check("battery healthy", state_code in (1, 2),
+                               label if state_code in (1, 2)
+                               else f"{label} -- charge before trusting drive tests"))
         except Exception as exc:  # noqa: BLE001
             self._record(Check("power state", False, str(exc)))
 
@@ -143,33 +156,41 @@ class Prober:
         ))
 
     async def stage_rate(self) -> None:
-        """**Open question 2** -- the true inter-packet floor.
+        """**Open question 2** -- the true packet throughput ceiling.
 
-        spherov2's 0.06 s is a conservative constant, not a datasheet figure.
-        Walks the interval down and watches for errors; the last clean interval
-        is the real budget the whole design is sized against.
+        Measures *achieved* rate for unacknowledged packets, which is what the
+        drive loop actually sends.
+
+        An earlier version slept the target interval **after** a blocking
+        acknowledged round-trip, so real spacing was always (latency + interval)
+        and it never probed above ~11 Hz -- then reported the target interval as
+        if it had been achieved. Measure what happens, not what was asked for.
         """
-        best = None
-        for interval in (0.10, 0.08, 0.06, 0.05, 0.04, 0.03, 0.02):
+        results: list[tuple[float, float]] = []
+        for target in (0.10, 0.07, 0.05, 0.04, 0.03, 0.02, 0.015, 0.010):
             errors_before = self.session.state.traffic.errors
-            failures = 0
-            for _ in range(15):
-                try:
-                    await self.session.request(protocol.ping, timeout=1.5)
-                except Exception:  # noqa: BLE001
-                    failures += 1
-                await asyncio.sleep(interval)
-            decode_errors = self.session.state.traffic.errors - errors_before
-            if failures or decode_errors:
-                self._record(Check(f"rate @ {interval * 1000:.0f}ms", False,
-                                   f"{failures} timeouts, {decode_errors} decode errors"))
-                break
-            self._record(Check(f"rate @ {interval * 1000:.0f}ms", True, "clean"))
-            best = interval
+            start = time.monotonic()
+            for _ in range(30):
+                await self.session.send(protocol.stop(0, seq=self.session._next_seq()))
+                await asyncio.sleep(target)
+            elapsed = time.monotonic() - start
+            achieved = 30 / elapsed
+            errors = self.session.state.traffic.errors - errors_before
+            results.append((target, achieved))
+            self._record(Check(
+                f"rate target {target * 1000:.0f}ms", errors == 0,
+                f"achieved {achieved:.1f} Hz",
+                {"target_hz": 1 / target, "achieved_hz": achieved, "errors": errors},
+            ))
 
-        if best is not None:
-            self._record(Check("sustainable interval", True, f"{best * 1000:.0f} ms",
-                               {"hz": 1.0 / best}))
+        # The ceiling is where achieved rate stops tracking the target: past that
+        # point the link, not our pacing, is the limit.
+        ceiling = max(a for _, a in results)
+        self._record(Check("throughput ceiling", True, f"{ceiling:.1f} pkt/s",
+                           {"hz": ceiling, "interval_ms": 1000 / ceiling}))
+        self._record(Check("write mode", True,
+                           "with-response" if getattr(self.session.transport, "write_response", True)
+                           else "without-response (--no-response)"))
 
     async def stage_drive(self) -> None:
         """**Open question 6** -- ROLL modes, including calibrate.
@@ -216,25 +237,28 @@ class Prober:
 
     async def stage_sensors(self) -> None:
         """**Open question 4** -- stream rates and dropouts."""
-        for interval_ms, label in ((100, "10 Hz"), (50, "20 Hz"), (25, "40 Hz")):
+        for hz in (4.0, 8.0, 16.0):
             self.session.state.telemetry.clear()
             before = self.session.state.traffic.received
             primary, extended = sensors.build_masks(sensors.DRIVE_PRESET)
             self.session._masks = (primary, extended)
+            divisor = protocol.hz_to_divisor(hz)
             await self.session.send(protocol.set_data_streaming(
-                interval_ms=interval_ms, samples_per_packet=1, mask=primary,
+                divisor=divisor, samples_per_packet=1, mask=primary,
                 count=0, extended_mask=extended, seq=self.session._next_seq()))
             await asyncio.sleep(3.0)
             received = self.session.state.traffic.received - before
-            expected = 3.0 * (1000 / interval_ms)
+            # Rate is 400/divisor, NOT 1000/divisor. Getting this wrong made a
+            # perfectly healthy stream look like 40% packet loss.
+            expected = 3.0 * protocol.divisor_to_hz(divisor)
             ratio = received / expected if expected else 0.0
-            self._record(Check(f"sensor stream {label}", ratio > 0.7,
-                               f"{received} frames of ~{expected:.0f}",
+            self._record(Check(f"sensor stream {hz:.0f} Hz (divisor {divisor})",
+                               ratio > 0.85, f"{received} frames of ~{expected:.0f}",
                                {"delivered_pct": ratio * 100}))
 
         # Stop streaming; mask=0 is the off switch.
         await self.session.send(protocol.set_data_streaming(
-            interval_ms=0, samples_per_packet=0, mask=0, count=0,
+            divisor=0, samples_per_packet=0, mask=0, count=0,
             extended_mask=0, seq=self.session._next_seq()))
         self._record(Check("telemetry decoded", bool(self.session.state.telemetry),
                            str(dict(list(self.session.state.telemetry.items())[:4]))))
