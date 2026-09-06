@@ -5,3 +5,9 @@ __pycache__/
 captures/*.jsonl
 !captures/demo-session.jsonl
 .DS_Store
+
+# Xcode
+ios/**/.build/
+ios/**/*.xcuserdatad/
+ios/**/xcuserdata/
+DerivedData/

@@ -9,7 +9,14 @@ transcription rather than a reverse-engineering project.
 
 ## Status
 
-**Step 1 complete.** Verified on hardware 2026-09-06 against BB-D36B: driven with
+**Step 1 complete. Step 2 builds and runs in the Simulator.**
+
+The iOS app (`ios/`) ports the codec to Swift and validates it against the same
+golden vectors — **44 Swift tests prove the two implementations emit identical
+bytes.** See [docs/07-ios-app.md](docs/07-ios-app.md). Not yet run on a physical
+device.
+
+### Step 1 Verified on hardware 2026-09-06 against BB-D36B: driven with
 an Xbox controller for 47 s, 358 drive commands across 237 distinct headings, peak
 105 cm/s, ~2.2 m travelled, **zero errors**. 183 tests, none requiring the droid.
 
