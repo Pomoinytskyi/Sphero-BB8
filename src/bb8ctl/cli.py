@@ -115,7 +115,10 @@ async def cmd_drive(args: argparse.Namespace) -> int:
     with CaptureWriter(capture_path) as capture:
         state = State()
         state.droid_address, state.droid_name = address, "BB-8"
-        session = Session(BleTransport(address, capture=capture), state)
+        session = Session(
+            BleTransport(address, capture=capture, write_response=not args.no_response),
+            state,
+        )
         try:
             await session.connect()
         except Exception as exc:  # noqa: BLE001
@@ -123,7 +126,10 @@ async def cmd_drive(args: argparse.Namespace) -> int:
             await session.shutdown()
             return 1
 
-        await session.configure(stream=sensors.DRIVE_PRESET if args.telemetry else None)
+        await session.configure(
+            stream=sensors.DRIVE_PRESET if args.telemetry else None,
+            stream_hz=args.stream_hz,
+        )
         transmitter = Transmitter(session, state, interval=args.interval)
         drive_app = DriveApp(session, state, pad, transmitter)
 
@@ -246,6 +252,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--interval", type=float, default=DEFAULT_INTERVAL,
                    help="seconds between packets")
     p.add_argument("--telemetry", action="store_true", help="enable sensor streaming")
+    p.add_argument("--stream-hz", type=float, default=8.0,
+                   help="sensor stream rate; the wire takes a 400Hz divisor")
+    p.add_argument("--no-response", action="store_true",
+                   help="BLE write-without-response (skips the link-layer ack)")
     p.add_argument("--no-tui", action="store_true")
     p.set_defaults(func=cmd_drive, is_async=True)
 
