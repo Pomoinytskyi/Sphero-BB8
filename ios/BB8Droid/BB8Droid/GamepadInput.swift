@@ -24,6 +24,8 @@ final class GamepadInput {
     private(set) var sample = Sample()
     private var previousButtons: Set<String> = []
     private var virtual: GCVirtualController?
+    /// Set when the user has a physical pad and does not want the overlay.
+    private var suppressVirtual = false
     private let state: DroidState
 
     /// Actions bound to named buttons. Aim is a *hold*; the rest are edges.
@@ -36,37 +38,63 @@ final class GamepadInput {
         self.state = state
         NotificationCenter.default.addObserver(
             forName: .GCControllerDidConnect, object: nil, queue: .main
-        ) { [weak self] _ in Task { @MainActor in self?.adoptController() } }
+        ) { [weak self] _ in
+            Task { @MainActor in
+                // GCVirtualController populates its `controller` property
+                // *asynchronously* after connect(), so this notification can
+                // arrive before the identity check can recognise our own pad.
+                // One turn of deferral is the difference between a stable UI and
+                // dismissing the on-screen controller the instant we create it.
+                try? await Task.sleep(for: .milliseconds(80))
+                self?.adoptController()
+            }
+        }
 
         NotificationCenter.default.addObserver(
             forName: .GCControllerDidDisconnect, object: nil, queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] notification in
             Task { @MainActor in
-                self?.state.controllerName = nil
-                self?.sample.connected = false
-                // Fall back to touch rather than leaving the user with no
-                // control at all mid-drive.
-                self?.presentVirtualController()
+                guard let self else { return }
+                // Ignore our own on-screen pad disconnecting; otherwise
+                // dismissing it re-presents it, forever.
+                if let disconnected = notification.object as? GCController,
+                   disconnected === self.virtual?.controller { return }
+                self.adoptController()
             }
         }
         adoptController()
     }
 
+    /// The first *physical* controller, if any.
+    ///
+    /// `GCController.controllers()` includes the on-screen pad, so this filter
+    /// is load-bearing: without it the virtual controller looks like a real one,
+    /// gets dismissed as redundant, fires a disconnect, and is presented again —
+    /// an oscillation that flickers the whole UI several times a second.
+    private var physicalController: GCController? {
+        GCController.controllers().first { $0 !== virtual?.controller }
+    }
+
+    /// Reconcile which controller we are driving from.
+    ///
+    /// Fails *safe*: the on-screen pad is only dismissed when a physical
+    /// controller has been positively identified. If identity is ambiguous we
+    /// keep touch control, because the failure mode of guessing wrong is a user
+    /// with no way to stop a moving droid.
     private func adoptController() {
-        guard let controller = GCController.controllers().first else {
+        if let controller = physicalController {
+            dismissVirtualController()          // a real pad supersedes touch
+            state.controllerName = controller.vendorName ?? "Controller"
+            state.usingVirtualController = false
+            sample.connected = true
+        } else if virtual == nil {
             presentVirtualController()
-            return
         }
-        // A real pad supersedes the on-screen one.
-        dismissVirtualController()
-        state.controllerName = controller.vendorName
-        state.usingVirtualController = false
-        sample.connected = true
     }
 
     /// On-screen stick, presented through the same `extendedGamepad` interface.
     func presentVirtualController() {
-        guard virtual == nil else { return }
+        guard virtual == nil, !suppressVirtual else { return }
         let configuration = GCVirtualController.Configuration()
         configuration.elements = [
             GCInputLeftThumbstick, GCInputButtonA, GCInputButtonB,
@@ -80,9 +108,17 @@ final class GamepadInput {
         sample.connected = true
     }
 
+    /// Hide the on-screen pad. Used both when a real controller appears and
+    /// when the user turns it off explicitly.
+    func setVirtualControllerHidden(_ hidden: Bool) {
+        suppressVirtual = hidden
+        if hidden { dismissVirtualController() } else { adoptController() }
+    }
+
     func dismissVirtualController() {
-        virtual?.disconnect()
-        virtual = nil
+        guard let controller = virtual else { return }
+        virtual = nil                 // cleared first, so the disconnect
+        controller.disconnect()       // notification recognises it as ours
         state.usingVirtualController = false
     }
 
@@ -92,7 +128,9 @@ final class GamepadInput {
     /// backlog of where it was. An event queue here would reintroduce exactly
     /// the staleness the single-slot cell exists to prevent.
     func poll() -> Sample {
-        guard let pad = GCController.controllers().first?.extendedGamepad else {
+        // Prefer a physical pad; fall back to the on-screen one.
+        let active = physicalController ?? virtual?.controller
+        guard let pad = active?.extendedGamepad else {
             sample.connected = false
             return sample
         }
