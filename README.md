@@ -60,6 +60,12 @@ python3.13 -m venv .venv && ./.venv/bin/pip install -e '.[dev]'
 
 Everything above runs with no droid and no controller.
 
+### Running on a device
+
+The project has no development team set — pick your own under **Signing &
+Capabilities** in Xcode. Note that a free Apple account allows only three
+installed apps per device and re-signing every 7 days.
+
 ### With hardware
 
 > **Run these from Terminal.app or iTerm2, not an embedded terminal.** macOS kills
