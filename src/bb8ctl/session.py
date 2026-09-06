@@ -51,9 +51,9 @@ class Session:
         self._seq = (self._seq + 1) % 0x100
         return self._seq
 
-    async def send(self, packet: bytes) -> None:
+    async def send(self, packet: bytes, *, reliable: bool = False) -> None:
         """Fire and forget. The hot path -- must never wait (N3)."""
-        await self.transport.send(packet)
+        await self.transport.send(packet, reliable=reliable)
         self.state.traffic.note_send()
         self.state.wire.append((self.state.uptime, Direction.TX.value, packet))
 
@@ -73,7 +73,9 @@ class Session:
         self._waiting[seq] = future
         self._sent_at[seq] = time.monotonic()
         try:
-            await self.send(packet)
+            # Reliable: we are about to block on a reply, so a silently dropped
+            # write would show up as a timeout and look like a dead droid.
+            await self.send(packet, reliable=True)
             return await asyncio.wait_for(future, timeout or self.RESPONSE_TIMEOUT)
         finally:
             self._waiting.pop(seq, None)
@@ -169,10 +171,15 @@ class Session:
         rather than a re-derivation (A10) -- scattered init is how a reconnected
         session ends up subtly different from a fresh one.
         """
-        await self.send(protocol.set_motion_timeout(self.MOTION_TIMEOUT_MS, seq=self._next_seq()))
-        await self.send(protocol.set_stabilization(True, seq=self._next_seq()))
-        await self.send(protocol.set_back_led(64, seq=self._next_seq()))
-        await self.send(protocol.configure_collision_detection(seq=self._next_seq()))
+        # Reliable writes: these run once, and a dropped one leaves the droid in
+        # a subtly wrong state for the whole session. Notably, without
+        # SET_STABILIZATION the control system stays off and ROLL does nothing --
+        # well-formed packets, motionless droid, no error anywhere.
+        await self.send(protocol.set_motion_timeout(self.MOTION_TIMEOUT_MS, seq=self._next_seq()),
+                        reliable=True)
+        await self.send(protocol.set_stabilization(True, seq=self._next_seq()), reliable=True)
+        await self.send(protocol.set_back_led(64, seq=self._next_seq()), reliable=True)
+        await self.send(protocol.configure_collision_detection(seq=self._next_seq()), reliable=True)
 
         if stream:
             primary, extended = sensors.build_masks(stream)

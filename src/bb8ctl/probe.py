@@ -13,6 +13,7 @@ buries the actual cause.
 from __future__ import annotations
 
 import asyncio
+import math
 import statistics
 import time
 from dataclasses import dataclass, field
@@ -192,27 +193,80 @@ class Prober:
                            "with-response" if getattr(self.session.transport, "write_response", True)
                            else "without-response (--no-response)"))
 
-    async def stage_drive(self) -> None:
-        """**Open question 6** -- ROLL modes, including calibrate.
+    async def _ensure_stream(self, hz: float = 16.0) -> None:
+        """Turn on telemetry so motion can be *measured* rather than eyeballed."""
+        primary, extended = sensors.build_masks(sensors.DRIVE_PRESET)
+        self.session._masks = (primary, extended)
+        await self.session.send(protocol.set_data_streaming(
+            divisor=protocol.hz_to_divisor(hz), samples_per_packet=1, mask=primary,
+            count=0, extended_mask=extended, seq=self.session._next_seq()), reliable=True)
+        await asyncio.sleep(0.4)
 
-        Uses low speeds only. The droid will move; give it clear floor.
+    async def _watch(self, duration: float) -> dict[str, float]:
+        """Sample telemetry across a window, returning what actually happened.
+
+        Turning "confirm the droid moved" into a measurement matters more than
+        it looks: the first probe run reported PASS for three drive checks on a
+        droid that never budged, because 'packet accepted' was all it tested.
         """
-        try:
-            await self.session.send(protocol.roll(40, 0, seq=self.session._next_seq()))
-            await asyncio.sleep(0.8)
-            await self.session.send(protocol.stop(0, seq=self.session._next_seq()))
-            self._record(Check("roll + stop", True, "sent -- confirm the droid moved"))
-        except Exception as exc:  # noqa: BLE001
-            self._record(Check("roll + stop", False, str(exc)))
+        tel = self.session.state.telemetry
+        x0, y0 = tel.get("locator_x", 0.0), tel.get("locator_y", 0.0)
+        yaw0 = tel.get("yaw", 0.0)
+        peak_speed = 0.0
+        deadline = time.monotonic() + duration
+        while time.monotonic() < deadline:
+            await asyncio.sleep(0.05)
+            peak_speed = max(
+                peak_speed,
+                abs(tel.get("speed", 0.0)),
+                math.hypot(tel.get("velocity_x", 0.0), tel.get("velocity_y", 0.0)),
+            )
+        dx = tel.get("locator_x", 0.0) - x0
+        dy = tel.get("locator_y", 0.0) - y0
+        dyaw = abs((tel.get("yaw", 0.0) - yaw0 + 180) % 360 - 180)
+        return {"peak_speed": peak_speed, "distance_cm": math.hypot(dx, dy), "yaw_change": dyaw}
+
+    async def stage_drive(self) -> None:
+        """**Open question 6** -- ROLL modes, verified against telemetry.
+
+        The droid will move. Give it a metre of clear floor.
+        """
+        await self._ensure_stream()
+
+        # Stabilization must be on or ROLL is inert -- well-formed packets, a
+        # motionless droid, and no error to explain it.
+        await self.session.send(protocol.set_stabilization(True, seq=self.session._next_seq()),
+                                reliable=True)
+        await asyncio.sleep(0.3)
 
         try:
-            for heading in (0, 90, 180, 270, 0):
-                await self.session.send(protocol.calibrate(heading, seq=self.session._next_seq()))
-                await asyncio.sleep(0.4)
-            self._record(Check("ROLL mode 2 (calibrate)", True,
-                               "sent -- confirm it rotated WITHOUT driving"))
+            await self.session.send(protocol.roll(70, 0, seq=self.session._next_seq()))
+            moved = await self._watch(1.2)
+            await self.session.send(protocol.stop(0, seq=self.session._next_seq()))
+            await asyncio.sleep(0.6)
+            ok = moved["peak_speed"] > 3.0 or moved["distance_cm"] > 5.0
+            self._record(Check(
+                "roll moves the droid", ok,
+                "measured motion" if ok else "NO MOTION DETECTED -- check floor space and head",
+                {"peak_speed": moved["peak_speed"], "distance_cm": moved["distance_cm"]},
+            ))
         except Exception as exc:  # noqa: BLE001
-            self._record(Check("ROLL mode 2 (calibrate)", False, str(exc)))
+            self._record(Check("roll moves the droid", False, str(exc)))
+
+        try:
+            # Calibrate should swing the heading reference while the ball stays put.
+            for heading in (0, 120, 240, 0):
+                await self.session.send(protocol.calibrate(heading, seq=self.session._next_seq()))
+                await asyncio.sleep(0.5)
+            turned = await self._watch(0.8)
+            stayed = turned["distance_cm"] < 10.0
+            self._record(Check(
+                "ROLL mode 2 rotates without driving", stayed,
+                "stayed in place" if stayed else "droid translated -- not a pure rotation",
+                {"distance_cm": turned["distance_cm"]},
+            ))
+        except Exception as exc:  # noqa: BLE001
+            self._record(Check("ROLL mode 2 rotates without driving", False, str(exc)))
 
     async def stage_safety(self) -> None:
         """**Open question 5** -- does SET_MOTION_TIMEOUT actually fire?
@@ -221,15 +275,26 @@ class Prober:
         A droid that keeps going has no dead-man switch, which would make N4
         unenforceable and every crash a runaway.
         """
+        await self._ensure_stream()
         try:
-            await self.session.send(protocol.set_motion_timeout(800, seq=self.session._next_seq()))
-            await asyncio.sleep(0.1)
-            await self.session.send(protocol.roll(40, 0, seq=self.session._next_seq()))
-            await asyncio.sleep(2.5)  # silence -- the timeout should bite
-            self._record(Check("motion timeout", True,
-                               "confirm the droid stopped on its own within ~1 s"))
+            await self.session.send(protocol.set_motion_timeout(800, seq=self.session._next_seq()),
+                                    reliable=True)
+            await asyncio.sleep(0.2)
+            await self.session.send(protocol.roll(70, 0, seq=self.session._next_seq()))
+            rolling = await self._watch(0.7)          # should be moving here
+            # Now go silent. The firmware timeout must stop it unaided.
+            coasting = await self._watch(2.0)
+            started = rolling["peak_speed"] > 3.0
+            stopped = coasting["peak_speed"] < max(3.0, rolling["peak_speed"] * 0.4)
+            self._record(Check(
+                "motion timeout stops the droid", started and stopped,
+                "stopped unaided" if started and stopped
+                else ("never started -- inconclusive" if not started
+                      else "STILL MOVING -- no dead-man switch, N4 unenforceable"),
+                {"rolling_speed": rolling["peak_speed"], "after_silence": coasting["peak_speed"]},
+            ))
         except Exception as exc:  # noqa: BLE001
-            self._record(Check("motion timeout", False, str(exc)))
+            self._record(Check("motion timeout stops the droid", False, str(exc)))
         finally:
             await self.session.send(protocol.stop(0, seq=self.session._next_seq()))
             await self.session.send(

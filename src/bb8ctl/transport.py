@@ -90,7 +90,7 @@ class Transport(Protocol):
     """What the session layer is allowed to assume about the radio."""
 
     async def connect(self) -> None: ...
-    async def send(self, data: bytes) -> None: ...
+    async def send(self, data: bytes, *, reliable: bool = False) -> None: ...
     async def close(self) -> None: ...
     def notifications(self) -> AsyncIterator[bytes]: ...
     @property
@@ -120,9 +120,19 @@ class _QueueNotifier:
 class BleTransport(_QueueNotifier):
     """Real BLE via bleak.
 
-    ``write_response`` defaults to True, matching the known-good behaviour of
-    spherov2. Write-*without*-response should be materially faster and is a
-    Phase 3 measurement (docs/06 §5 step 4), not an assumption to bake in now.
+    Write mode is chosen **per call**, not per transport, because the two kinds
+    of traffic want different guarantees.
+
+    Measured on hardware (2026-09-06): write-with-response tops out at
+    **16.7 pkt/s**, write-without-response reaches **89.2 pkt/s** -- a 5.3x
+    difference, with zero errors at every rate tested. The with-response ceiling
+    of 59.8 ms is almost exactly spherov2's 60 ms "firmware safe interval",
+    which strongly suggests that constant was never a firmware limit at all but
+    the BLE link-layer acknowledgement round trip.
+
+    So: the drive loop writes without response (a dropped packet is corrected by
+    the next one 33 ms later), while setup and acknowledged commands write with
+    response, where delivery actually matters.
     """
 
     def __init__(
@@ -130,12 +140,13 @@ class BleTransport(_QueueNotifier):
         address: str,
         *,
         capture: CaptureWriter | None = None,
-        write_response: bool = True,
+        fast_writes: bool = True,
     ) -> None:
         super().__init__()
         self.address = address
         self.capture = capture
-        self.write_response = write_response
+        #: When False, every write is acknowledged -- the slow, conservative path.
+        self.fast_writes = fast_writes
         self._client = None
         self._disconnected = asyncio.Event()
 
@@ -166,14 +177,25 @@ class BleTransport(_QueueNotifier):
 
         await self._client.start_notify(protocol.CHAR_RESPONSE, _cb)
 
-    async def send(self, data: bytes) -> None:
+    async def send(self, data: bytes, *, reliable: bool = False) -> None:
+        """Write a command packet.
+
+        ``reliable=True`` forces a link-layer acknowledgement. Use it when the
+        command's delivery matters and a reply is expected; leave it False on
+        the drive path, where the next packet supersedes this one anyway.
+        """
         if self.capture:
             self.capture.record(Direction.TX, data)
+        response = reliable or not self.fast_writes
         for chunk in protocol.chunked(data):
-            await self._client.write_gatt_char(protocol.CHAR_COMMAND, chunk, self.write_response)
+            await self._client.write_gatt_char(protocol.CHAR_COMMAND, chunk, response)
 
     async def write_raw(self, uuid: str, data: bytes) -> None:
-        """Write to a characteristic other than the command one (handshake, wake)."""
+        """Write to a characteristic other than the command one (handshake, wake).
+
+        Always acknowledged: if the anti-DOS write is silently dropped the droid
+        stays mute forever, with no error to point at.
+        """
         if self.capture:
             self.capture.record(Direction.TX, data)
         await self._client.write_gatt_char(uuid, data, True)
@@ -236,7 +258,7 @@ class ReplayTransport(_QueueNotifier):
         finally:
             self._stop()
 
-    async def send(self, data: bytes) -> None:
+    async def send(self, data: bytes, *, reliable: bool = False) -> None:
         self.sent.append(bytes(data))
 
     async def write_raw(self, uuid: str, data: bytes) -> None:
@@ -272,7 +294,7 @@ class FakeTransport(_QueueNotifier):
     async def start_notifications(self) -> None:
         return None
 
-    async def send(self, data: bytes) -> None:
+    async def send(self, data: bytes, *, reliable: bool = False) -> None:
         self.sent.append(bytes(data))
         # Only acknowledged packets (SOP2 == 0xFF) get a reply, mirroring the
         # firmware. Auto-answering everything would hide a stuck transmitter.

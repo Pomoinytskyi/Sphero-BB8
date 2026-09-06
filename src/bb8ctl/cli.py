@@ -72,7 +72,7 @@ async def cmd_probe(args: argparse.Namespace) -> int:
     with CaptureWriter(capture_path) as capture:
         state = State()
         state.droid_address = address
-        transport = BleTransport(address, capture=capture, write_response=not args.no_response)
+        transport = BleTransport(address, capture=capture, fast_writes=not args.slow_writes)
         session = Session(transport, state)
         try:
             await session.connect()
@@ -82,6 +82,8 @@ async def cmd_probe(args: argparse.Namespace) -> int:
             await session.shutdown()
             return 1
 
+        # Without this the control system stays off and ROLL is silently inert.
+        await session.configure()
         prober = probe_module.Prober(session)
         try:
             if args.stage:
@@ -116,7 +118,7 @@ async def cmd_drive(args: argparse.Namespace) -> int:
         state = State()
         state.droid_address, state.droid_name = address, "BB-8"
         session = Session(
-            BleTransport(address, capture=capture, write_response=not args.no_response),
+            BleTransport(address, capture=capture, fast_writes=not args.slow_writes),
             state,
         )
         try:
@@ -243,8 +245,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--address")
     p.add_argument("--stage", choices=probe_module.STAGES,
                    help="run a single stage instead of all")
-    p.add_argument("--no-response", action="store_true",
-                   help="use BLE write-without-response (faster; a rate experiment)")
+    p.add_argument("--slow-writes", action="store_true",
+                   help="force BLE write-with-response (5x slower; for comparison)")
     p.set_defaults(func=cmd_probe, is_async=True)
 
     p = sub.add_parser("drive", help="drive with a controller")
@@ -254,8 +256,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--telemetry", action="store_true", help="enable sensor streaming")
     p.add_argument("--stream-hz", type=float, default=8.0,
                    help="sensor stream rate; the wire takes a 400Hz divisor")
-    p.add_argument("--no-response", action="store_true",
-                   help="BLE write-without-response (skips the link-layer ack)")
+    p.add_argument("--slow-writes", action="store_true",
+                   help="force BLE write-with-response (5x slower; for comparison)")
     p.add_argument("--no-tui", action="store_true")
     p.set_defaults(func=cmd_drive, is_async=True)
 

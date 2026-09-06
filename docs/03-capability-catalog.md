@@ -240,10 +240,52 @@ acknowledge-everything design like spherov2's caps out near 8 commands/sec.
 
 All three are fixed; the rate stage now measures achieved unacknowledged throughput.
 
-### Outstanding: BLE write mode
+### BLE write mode — measured, and decisive
 
-`0xFE` removes the *application*-layer acknowledgement, but the run used BLE
-**write-with-response**, which still costs a link-layer round trip per write —
-the likely cause of the ~37-60 ms floor. `bb8ctl probe --no-response` uses
-write-without-response and should be the next measurement. If it lifts throughput
-materially, the §6 N1 command budget stops being a constraint at all.
+| Target interval | with-response | **without-response** |
+|---|---|---|
+| 100 ms | 6.7 Hz | 9.9 Hz |
+| 70 ms | 8.3 Hz | 14.0 Hz |
+| 50 ms | 11.1 Hz | 19.4 Hz |
+| 40 ms | 11.2 Hz | 24.2 Hz |
+| 30 ms | 11.2 Hz | 31.9 Hz |
+| 20 ms | 16.5 Hz | 46.8 Hz |
+| 15 ms | 16.7 Hz | 61.4 Hz |
+| 10 ms | 16.7 Hz | **89.2 Hz** |
+| **Ceiling** | **16.7 pkt/s (59.8 ms)** | **89.2 pkt/s (11.2 ms)** |
+
+Zero errors at every rate in both modes. **5.3x difference.**
+
+Two conclusions:
+
+1. **spherov2's 60 ms `cmd_safe_interval` is not a firmware limit.** The
+   with-response ceiling is 59.8 ms — that constant, almost exactly. It measures
+   the BLE link-layer acknowledgement round trip, and has been mistaken for a
+   property of the droid ever since.
+2. **The §6 N1 command budget conflict is void.** Driving plus reactive lighting
+   needed 17–25 packets/sec against an assumed ~16. The real figure is 89. The
+   light show is free, and the priority-lane machinery cut in simplification S1
+   stays cut.
+
+Without-response never actually plateaued — 11.2 ms is close to the BLE
+connection interval, so the limit is one packet per connection event, not
+anything in the droid.
+
+**Applied:** writes are now chosen per call — unacknowledged on the drive path
+(a dropped packet is superseded 33 ms later anyway), acknowledged for setup and
+for anything awaiting a reply. `DEFAULT_INTERVAL` moved 70 ms → 33 ms (30 Hz),
+about a third of the measured ceiling.
+
+### Defect found: SET_STABILIZATION was never sent
+
+`probe` connected but never ran connect-time configuration, so the control
+system was never enabled. The ROLL packets were perfectly well formed —
+`ff fe 02 30 c2 06 28 00 00 01 00 dc`, speed 40, mode GO, checksum valid — and
+the droid did not move. No error anywhere.
+
+This is exactly the failure mode constraint A12 exists for, and the probe's own
+reporting hid it: the drive checks asserted "packet accepted", not "droid moved".
+
+Both fixed. `probe` now runs `configure()` first, and the drive, calibrate and
+motion-timeout stages **measure the sensor stream** — peak speed, locator
+displacement, yaw change — instead of asking the operator to watch.

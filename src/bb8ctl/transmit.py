@@ -18,11 +18,16 @@ from bb8ctl import protocol
 from bb8ctl.control import CommandKind, DriveCommand
 from bb8ctl.state import State
 
-#: Seconds between packets. spherov2 uses 0.06 as a firmware-safe floor; we
-#: start slightly above it and let Phase 3 measurement tune it down
-#: (docs/06 §5 step 4). Deliberately a constant, not an adaptive governor --
-#: measure before building machinery to react to the measurement.
-DEFAULT_INTERVAL = 0.07
+#: Seconds between packets, set from hardware measurement (2026-09-06).
+#:
+#: Write-without-response sustains 89 pkt/s (11.2 ms) with zero errors, so 30 Hz
+#: sits at roughly a third of the measured ceiling -- responsive, with headroom
+#: left for background traffic and for whatever the link does on a bad day.
+#:
+#: spherov2's 0.06 "firmware safe interval" turns out to be the BLE
+#: write-with-response round trip, not a firmware constraint: with-response
+#: plateaus at 16.7 pkt/s == 59.8 ms, which is that constant almost exactly.
+DEFAULT_INTERVAL = 0.033
 
 
 class Transmitter:
