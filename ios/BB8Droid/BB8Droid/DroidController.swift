@@ -100,8 +100,15 @@ final class DroidController {
             state.control = .idle
         }
 
-        let command = Control.map(x: sample.lx, y: sample.ly, mode: state.driveMode,
-                                  profile: state.profile, heading: state.heading, dt: dt)
+        // Tank mode throttles on the triggers, falling back to stick Y. Absolute
+        // mode ignores the throttle argument — there the stick *is* the command.
+        let throttle = Control.tankThrottle(
+            stickY: sample.ly, leftTrigger: sample.lt, rightTrigger: sample.rt
+        )
+        state.throttle = throttle
+        let command = Control.map(x: sample.lx, y: sample.ly, throttle: throttle,
+                                  mode: state.driveMode, profile: state.profile,
+                                  heading: state.heading, dt: dt)
 
         // An e-stop stays latched until the stick recentres, so releasing the
         // panic button does not immediately resume driving.

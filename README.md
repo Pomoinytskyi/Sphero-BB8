@@ -97,13 +97,18 @@ Export golden vectors for the Swift port:
 
 | Input | Action |
 |---|---|
-| Left stick | Drive |
+| Left stick | Drive (absolute) · steer only (tank) |
+| **RT / LT** | Tank throttle — forward / reverse |
 | **RB (hold)** | Aim — stick rotates the heading reference without driving |
 | A | Reset aim — current facing becomes forward |
 | B | Emergency stop (latches until the stick recentres) |
 | X | Toggle drive model — absolute ↔ tank |
 | Y | Toggle speed profile — tortoise ↔ rabbit |
 | Back | Quit |
+
+In **tank** mode the stick steers and the triggers throttle. They are independent:
+steering at full throttle stays at full throttle. Stick Y still works as a throttle
+fallback, for the on-screen controller or if you prefer it.
 
 **Tortoise** caps speed at 90 with a softer curve; **rabbit** unlocks the full 255.
 Above roughly 120 BB-8 is unmanageable indoors — it reaches a wall faster than you

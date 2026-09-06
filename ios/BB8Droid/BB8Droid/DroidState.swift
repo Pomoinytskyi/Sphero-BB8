@@ -60,6 +60,8 @@ final class DroidState {
     var heading: Int = 0
     var speed: Int = 0
     var stick: (x: Double, y: Double) = (0, 0)
+    /// Signed tank throttle: triggers, or stick Y as a fallback.
+    var throttle: Double = 0
 
     var battery: Sphero.PowerState?
     var telemetry: [String: Double] = [:]

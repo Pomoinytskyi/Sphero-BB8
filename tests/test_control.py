@@ -175,3 +175,55 @@ class TestAiming:
 
     def test_aim_wraps(self):
         assert 0 <= c.aim_delta(-1.0, c.RABBIT, heading=0, dt=0.1) <= 359
+
+
+class TestTankDecoupling:
+    """The regression this redesign exists to prevent.
+
+    Steering and throttle are independent commands. With a radial deadzone and
+    circular clamp, a full forward-and-right push normalised to (0.707, 0.707),
+    so turning quietly cut speed by 30% -- which is what made tank mode feel
+    like the stick was fighting itself.
+    """
+
+    def test_steering_does_not_reduce_throttle(self):
+        straight = c.map_tank(0.0, 1.0, c.RABBIT, heading=0, dt=1 / 60)
+        turning = c.map_tank(1.0, 1.0, c.RABBIT, heading=0, dt=1 / 60)
+        assert straight.speed == turning.speed == c.RABBIT.cap
+
+    def test_throttle_does_not_reduce_steering(self):
+        coasting = c.map_tank(1.0, 0.0, c.RABBIT, heading=0, dt=0.1)
+        driving = c.map_tank(1.0, 1.0, c.RABBIT, heading=0, dt=0.1)
+        assert coasting.heading == driving.heading
+
+
+class TestAxialDeadzone:
+    def test_suppresses_small_input(self):
+        assert c.axial_deadzone(0.05, 0.12) == 0.0
+        assert c.axial_deadzone(-0.05, 0.12) == 0.0
+
+    def test_preserves_sign_and_reaches_full_range(self):
+        assert c.axial_deadzone(1.0, 0.12) == pytest.approx(1.0)
+        assert c.axial_deadzone(-1.0, 0.12) == pytest.approx(-1.0)
+
+    def test_continuous_at_the_threshold(self):
+        assert 0.0 < c.axial_deadzone(0.13, 0.12) < 0.02
+
+
+class TestTankThrottleSource:
+    def test_triggers_take_precedence_over_stick(self):
+        assert c.tank_throttle(1.0, 0.0, 0.5) == pytest.approx(0.5)
+
+    def test_left_trigger_reverses(self):
+        assert c.tank_throttle(0.0, 0.8, 0.0) == pytest.approx(-0.8)
+
+    def test_both_triggers_cancel(self):
+        assert c.tank_throttle(0.0, 0.6, 0.6) == pytest.approx(0.0)
+
+    def test_stick_is_the_fallback(self):
+        assert c.tank_throttle(-0.7, 0.0, 0.0) == pytest.approx(-0.7)
+
+    def test_absolute_mode_ignores_throttle(self):
+        with_throttle = c.map_input(0.0, 1.0, c.DriveMode.ABSOLUTE, c.RABBIT, throttle=0.0)
+        without = c.map_input(0.0, 1.0, c.DriveMode.ABSOLUTE, c.RABBIT)
+        assert with_throttle == without

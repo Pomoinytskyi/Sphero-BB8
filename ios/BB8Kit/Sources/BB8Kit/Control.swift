@@ -84,8 +84,33 @@ public enum Control {
         return (nx / magnitude * scaled, ny / magnitude * scaled)
     }
 
+    /// Per-axis deadzone, for controls whose axes mean different things.
+    ///
+    /// Tank mode steers with X and throttles with Y — two independent commands
+    /// that happen to share a stick. Running them through `radialDeadzone`
+    /// couples them: the circular clamp normalises a forward-and-right push to
+    /// (0.707, 0.707), so steering silently cuts throttle by 30%. Correct for a
+    /// direction vector, wrong for two separate controls.
+    public static func axialDeadzone(_ value: Double, _ deadzone: Double) -> Double {
+        let magnitude = abs(value)
+        guard magnitude > deadzone else { return 0 }
+        let scaled = (magnitude - deadzone) / (1 - deadzone)
+        return (value < 0 ? -1 : 1) * min(1, scaled)
+    }
+
     public static func applyExpo(_ magnitude: Double, _ expo: Double) -> Double {
         pow(magnitude, expo)
+    }
+
+    /// Throttle for tank mode, from triggers with the stick as a fallback.
+    ///
+    /// Triggers win when either is pressed: they are analog, they are squeezed
+    /// against spring tension rather than balanced, and they free the thumb to
+    /// do nothing but steer. Stick Y still works for anyone who prefers it, and
+    /// for the on-screen controller.
+    public static func tankThrottle(stickY: Double, leftTrigger: Double, rightTrigger: Double) -> Double {
+        let fromTriggers = rightTrigger - leftTrigger
+        return abs(fromTriggers) > 0.02 ? fromTriggers : stickY
     }
 
     /// Stick direction is world direction.
@@ -102,35 +127,43 @@ public enum Control {
         return DriveCommand(speed: speed, heading: heading)
     }
 
-    /// Y is throttle, X steers relative to the current facing.
+    /// Steering and throttle as independent controls.
+    ///
+    /// Deliberately takes them separately rather than as one stick vector: they
+    /// are different commands, and treating them as a vector is what coupled
+    /// them in the first place. Each gets its own axial deadzone, so steering at
+    /// full throttle stays at full throttle.
     ///
     /// Turn rate is integrated over `dt` so steering feel is frame-rate
     /// independent — otherwise the droid turns faster simply because the control
     /// loop ran quicker.
     public static func mapTank(
-        x: Double, y: Double, profile: SpeedProfile, heading: Int, dt: Double
+        steer: Double, throttle: Double, profile: SpeedProfile, heading: Int, dt: Double
     ) -> DriveCommand {
-        let (dx, dy) = radialDeadzone(x: x, y: y, deadzone: profile.deadzone)
-        var newHeading = Int(Double(heading) + dx * profile.turnRate * dt)
+        let steerInput = axialDeadzone(steer, profile.deadzone)
+        let throttleInput = axialDeadzone(throttle, profile.deadzone)
+        var newHeading = Int(Double(heading) + steerInput * profile.turnRate * dt)
 
-        let throttle = abs(dy)
-        guard throttle > 0 else {
+        guard throttleInput != 0 else {
             // Steering with no throttle still updates the heading, so releasing
             // the throttle mid-turn does not snap back to the old bearing.
             return DriveCommand(speed: 0, heading: newHeading, kind: .stop)
         }
-        if dy < 0 { newHeading += 180 }   // reverse: same axis, opposite bearing
-        let speed = Int((applyExpo(throttle, profile.expo) * Double(profile.cap)).rounded())
+        if throttleInput < 0 { newHeading += 180 }   // reverse: opposite bearing
+        let speed = Int((applyExpo(abs(throttleInput), profile.expo) * Double(profile.cap)).rounded())
         return DriveCommand(speed: speed, heading: newHeading)
     }
 
     public static func map(
-        x: Double, y: Double, mode: DriveMode, profile: SpeedProfile,
-        heading: Int = 0, dt: Double = 1.0 / 60
+        x: Double, y: Double, throttle: Double? = nil, mode: DriveMode,
+        profile: SpeedProfile, heading: Int = 0, dt: Double = 1.0 / 60
     ) -> DriveCommand {
         switch mode {
-        case .absolute: return mapAbsolute(x: x, y: y, profile: profile)
-        case .tank: return mapTank(x: x, y: y, profile: profile, heading: heading, dt: dt)
+        case .absolute:
+            return mapAbsolute(x: x, y: y, profile: profile)
+        case .tank:
+            return mapTank(steer: x, throttle: throttle ?? y,
+                           profile: profile, heading: heading, dt: dt)
         }
     }
 

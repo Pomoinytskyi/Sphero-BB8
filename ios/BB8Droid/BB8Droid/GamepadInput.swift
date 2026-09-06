@@ -17,6 +17,9 @@ final class GamepadInput {
     struct Sample {
         var lx: Double = 0
         var ly: Double = 0
+        /// Analog triggers: tank-mode reverse and forward.
+        var lt: Double = 0
+        var rt: Double = 0
         var buttons: Set<String> = []
         var connected = false
     }
@@ -99,6 +102,9 @@ final class GamepadInput {
         configuration.elements = [
             GCInputLeftThumbstick, GCInputButtonA, GCInputButtonB,
             GCInputButtonX, GCInputButtonY,
+            // Tank mode throttles on the triggers, so the on-screen pad needs
+            // them too or it cannot drive in that mode at all.
+            GCInputLeftTrigger, GCInputRightTrigger,
         ]
         let controller = GCVirtualController(configuration: configuration)
         controller.connect()
@@ -144,6 +150,8 @@ final class GamepadInput {
 
         sample.lx = Double(pad.leftThumbstick.xAxis.value)
         sample.ly = Double(pad.leftThumbstick.yAxis.value)   // already +ve = away
+        sample.lt = Double(pad.leftTrigger.value)
+        sample.rt = Double(pad.rightTrigger.value)
         sample.buttons = buttons
         sample.connected = true
         return sample

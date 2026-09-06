@@ -107,9 +107,36 @@ def radial_deadzone(x: float, y: float, deadzone: float) -> tuple[float, float]:
     return x / magnitude * scaled, y / magnitude * scaled
 
 
+def axial_deadzone(value: float, deadzone: float) -> float:
+    """Per-axis deadzone, for controls whose axes mean different things.
+
+    Tank mode steers with X and throttles with Y -- two independent commands
+    that happen to share a stick. Running them through :func:`radial_deadzone`
+    couples them: the circular clamp normalises a forward-and-right push to
+    (0.707, 0.707), so steering silently cuts throttle by 30%. Correct for a
+    direction vector, wrong for two separate controls.
+    """
+    magnitude = abs(value)
+    if magnitude <= deadzone:
+        return 0.0
+    scaled = min(1.0, (magnitude - deadzone) / (1.0 - deadzone))
+    return -scaled if value < 0 else scaled
+
+
 def apply_expo(magnitude: float, expo: float) -> float:
     """Bend the response curve. Higher ``expo`` = finer control near centre."""
     return magnitude**expo
+
+
+def tank_throttle(stick_y: float, left_trigger: float, right_trigger: float) -> float:
+    """Throttle for tank mode: triggers, with the stick as a fallback.
+
+    Triggers win when either is pressed. They are analog, they are squeezed
+    against spring tension rather than balanced, and they free the thumb to do
+    nothing but steer.
+    """
+    from_triggers = right_trigger - left_trigger
+    return from_triggers if abs(from_triggers) > 0.02 else stick_y
 
 
 def map_absolute(x: float, y: float, profile: SpeedProfile) -> DriveCommand:
@@ -130,26 +157,31 @@ def map_absolute(x: float, y: float, profile: SpeedProfile) -> DriveCommand:
 
 
 def map_tank(
-    x: float, y: float, profile: SpeedProfile, heading: int, dt: float
+    steer: float, throttle: float, profile: SpeedProfile, heading: int, dt: float
 ) -> DriveCommand:
-    """Y is throttle, X steers relative to the current facing.
+    """Steering and throttle as independent controls.
+
+    Deliberately takes them separately rather than as one stick vector: they are
+    different commands, and treating them as a vector is what coupled them in
+    the first place. Each gets its own axial deadzone, so steering at full
+    throttle stays at full throttle.
 
     Turn rate is integrated over ``dt`` so steering feel is frame-rate
     independent -- otherwise the droid would turn faster simply because the
     control loop ran quicker.
     """
-    dx, dy = radial_deadzone(x, y, profile.deadzone)
-    new_heading = int(heading + dx * profile.turn_rate * dt) % 360
+    steer_input = axial_deadzone(steer, profile.deadzone)
+    throttle_input = axial_deadzone(throttle, profile.deadzone)
+    new_heading = int(heading + steer_input * profile.turn_rate * dt) % 360
 
-    throttle = abs(dy)
-    if throttle == 0.0:
+    if throttle_input == 0.0:
         # Steering with no throttle still updates the heading, so releasing the
         # throttle mid-turn does not snap the droid back to its old bearing.
         return DriveCommand(speed=0, heading=new_heading, kind=CommandKind.STOP)
 
-    if dy < 0:  # reverse: same axis, opposite bearing
+    if throttle_input < 0:  # reverse: same axis, opposite bearing
         new_heading = (new_heading + 180) % 360
-    speed = round(apply_expo(throttle, profile.expo) * profile.cap)
+    speed = round(apply_expo(abs(throttle_input), profile.expo) * profile.cap)
     return DriveCommand(speed=speed, heading=new_heading)
 
 
@@ -160,11 +192,16 @@ def map_input(
     profile: SpeedProfile,
     heading: int = 0,
     dt: float = 1 / 60,
+    throttle: float | None = None,
 ) -> DriveCommand:
-    """Dispatch to the active drive model (constraint A3)."""
+    """Dispatch to the active drive model (constraint A3).
+
+    ``throttle`` applies to tank mode only. Absolute mode ignores it -- there the
+    stick *is* the command.
+    """
     if mode is DriveMode.ABSOLUTE:
         return map_absolute(x, y, profile)
-    return map_tank(x, y, profile, heading, dt)
+    return map_tank(x, y if throttle is None else throttle, profile, heading, dt)
 
 
 def aim_delta(x: float, profile: SpeedProfile, heading: int, dt: float) -> int:
