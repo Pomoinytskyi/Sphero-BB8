@@ -9,6 +9,8 @@ That this is possible at all is the payoff from putting the Transport seam in
 windows when the droid is actually available.
 """
 
+import asyncio
+
 import pytest
 
 from bb8ctl import protocol, sensors
@@ -173,3 +175,51 @@ class TestVectorExport:
         assert payload["sensor_masks"]["field_order"] == [
             f.name for f in sensors.layout(primary, extended)
         ]
+
+
+class TestDriveDashboardTeardown:
+    """Either side ending must tear down the other -- one exit path (A11).
+
+    Uses doubles rather than a live Textual app: the behaviour under test is the
+    teardown wiring, and driving a real app's lifecycle from inside its own test
+    harness tests Textual instead.
+    """
+
+    class FakeDashboard:
+        def __init__(self) -> None:
+            self.exited = asyncio.Event()
+
+        async def run_async(self) -> None:
+            await self.exited.wait()
+
+        def exit(self) -> None:
+            self.exited.set()
+
+    class FakeDriveApp:
+        def __init__(self, run_forever: bool = False) -> None:
+            self.quit_requested = False
+            self.run_forever = run_forever
+
+        async def run(self) -> None:
+            while self.run_forever and not self.quit_requested:
+                await asyncio.sleep(0.005)
+
+    async def test_controller_quit_closes_the_dashboard(self):
+        """Back on the pad must not leave a dead panel on screen."""
+        from bb8ctl.cli import _drive_with_dashboard
+
+        dashboard = self.FakeDashboard()
+        await _drive_with_dashboard(self.FakeDriveApp(), dashboard)
+        assert dashboard.exited.is_set()
+
+    async def test_dashboard_quit_stops_driving(self):
+        """Quitting the TUI must stop the droid, not orphan the control loop."""
+        from bb8ctl.cli import _drive_with_dashboard
+
+        dashboard = self.FakeDashboard()
+        drive_app = self.FakeDriveApp(run_forever=True)
+        task = asyncio.create_task(_drive_with_dashboard(drive_app, dashboard))
+        await asyncio.sleep(0.02)
+        dashboard.exit()
+        await asyncio.wait_for(task, timeout=1.0)
+        assert drive_app.quit_requested is True

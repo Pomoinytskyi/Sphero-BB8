@@ -130,22 +130,34 @@ async def cmd_drive(args: argparse.Namespace) -> int:
         if args.no_tui:
             await drive_app.run()
         else:
-            dashboard = Dashboard(state)
-            async with asyncio.TaskGroup() as tg:
-                tg.create_task(drive_app.run())
-                tg.create_task(_run_dashboard(dashboard, drive_app))
+            await _drive_with_dashboard(drive_app, Dashboard(state))
         pad.close()
 
     print(f"capture: {capture_path}")
     return 0
 
 
-async def _run_dashboard(dashboard, drive_app) -> None:
-    """Quitting the TUI must stop the droid too -- one exit path (A11)."""
-    try:
-        await dashboard.run_async()
-    finally:
-        drive_app.quit_requested = True
+async def _drive_with_dashboard(drive_app, dashboard) -> None:
+    """Run driving and the TUI together, with either able to end the session.
+
+    Both directions matter: quitting the TUI must stop the droid, and quitting
+    from the controller must close the TUI rather than leaving a dead panel on
+    screen. Whichever finishes first tears down the other, so there is still
+    exactly one shutdown path (A11).
+    """
+    async def drive() -> None:
+        try:
+            await drive_app.run()
+        finally:
+            dashboard.exit()
+
+    async def show() -> None:
+        try:
+            await dashboard.run_async()
+        finally:
+            drive_app.quit_requested = True
+
+    await asyncio.gather(drive(), show())
 
 
 async def cmd_replay(args: argparse.Namespace) -> int:
