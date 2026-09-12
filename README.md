@@ -9,16 +9,14 @@ transcription rather than a reverse-engineering project.
 
 ## Status
 
-**Step 1 complete. Step 2 builds and runs in the Simulator.**
+Both steps are built. The Python CLI is complete and hardware-verified; the iOS
+app is built, signed and installed on a physical iPhone.
 
-The iOS app (`ios/`) ports the codec to Swift and validates it against the same
-golden vectors — **44 Swift tests prove the two implementations emit identical
-bytes.** See [docs/07-ios-app.md](docs/07-ios-app.md). Not yet run on a physical
-device.
+Verified on hardware 2026-09-06 against a real droid: driven with an Xbox
+controller for 47 s, 358 drive commands across 237 distinct headings, peak
+105 cm/s, ~2.2 m travelled, **zero errors**.
 
-### Step 1 Verified on hardware 2026-09-06 against BB-D36B: driven with
-an Xbox controller for 47 s, 358 drive commands across 237 distinct headings, peak
-105 cm/s, ~2.2 m travelled, **zero errors**. 183 tests, none requiring the droid.
+**197 Python tests and 58 Swift tests, none of which require the droid.**
 
 | Component | State |
 |---|---|
@@ -28,8 +26,34 @@ an Xbox controller for 47 s, 358 drive commands across 237 distinct headings, pe
 | Control math, drive models, speed profiles | Done |
 | Transmitter (single-slot cell) | Done |
 | Gamepad, control loop, TUI | Done |
-| Probe suite | Done, **hardware-verified** |
-| Aim mode (`ROLL` mode 2) | Implemented, **not yet exercised on hardware** |
+| Probe suite | Done, hardware-verified |
+| Swift port (`BB8Kit`) | Done, byte-identical to Python |
+| iOS app (`BB8Droid`) | Runs on device |
+| Aim mode (`ROLL` mode 2) | Implemented, **never exercised on hardware** |
+| On-screen controller fallback | Implemented, **unconfirmed on device** |
+| Trigger throttle (RT/LT) | Implemented, **untested against the droid** |
+
+### Picking this up again
+
+Three things need the droid and a metre of clear floor. None can be advanced
+from a keyboard:
+
+1. **Aim mode** — hold RB and push the stick sideways. BB-8 should rotate *in
+   place* without driving off. Absolute drive mode is only pleasant if this
+   works, and it has never been confirmed on either implementation.
+2. **Trigger throttle** — hold RT at half and steer hard both ways. The speed
+   should stay put. It used to sag, because tank mode ran both axes through a
+   radial deadzone and the circular clamp cut throttle by 30% when steering.
+3. **On-screen thumbstick** — unpair the controller and check it appears.
+   `GCVirtualController` never rendered in the Simulator, which is a poor place
+   to test it.
+
+Deferred by choice, both platform-agnostic and testable with no hardware:
+trajectory mapping from the locator stream, and macro record-and-replay.
+
+> **Signing:** a free Apple account signs a build for 7 days and allows three
+> installed apps per device. If the app refuses to launch, it has simply
+> expired — rebuild and reinstall.
 
 ### What the hardware told us
 
