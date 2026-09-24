@@ -51,6 +51,22 @@ module grip_bump_set() {
         on_head(az, -2, r_in + bump_d / 2 - bump_h) sphere(d = bump_d, $fn = 24);
 }
 
+module wedge(half_az, r) {
+    // Solid sector of a cylinder in front (+X), |azimuth| <= half_az.
+    rotate([0, 0, -half_az]) rotate_extrude(angle = 2 * half_az)
+        square([r, 200], center = false);
+}
+
+// Open face: everything in front, below top_z, within |az| <= half_az, but
+// only inside the shell so that anything standing proud of it survives.
+module face_cut(half_az, top_z) {
+    intersection() {
+        sphere(r = r_out + 0.05);
+        translate([0, 0, -100]) wedge(half_az, 100);
+        translate([-100, -100, -100]) cube([200, 200, 100 + top_z]);
+    }
+}
+
 // Outer additions go in children(); the cavity, rim, slot and any extra cuts
 // passed through extra_cuts() are removed afterwards, then the bumps added.
 module helmet_body() {

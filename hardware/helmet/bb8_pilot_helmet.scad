@@ -28,22 +28,6 @@ pod_d          = 13;    // side comm-pod diameter
 pod_proud      = 1.8;   // how far the pod stands out
 pod_el         = 6;
 
-module wedge(half_az, r) {
-    // Solid sector of a cylinder in front (+X), |azimuth| <= half_az.
-    rotate([0, 0, -half_az]) rotate_extrude(angle = 2 * half_az)
-        square([r, 200], center = false);
-}
-
-module face_cut() {
-    // Everything in front of the eyes and below the brow line, but only
-    // within the shell, so the visor peak survives.
-    intersection() {
-        sphere(r = r_out + 0.05);
-        translate([0, 0, -100]) wedge(face_half_az, 100);
-        translate([-100, -100, -100]) cube([200, 200, 100 + face_top_z]);
-    }
-}
-
 module visor_peak() {
     // rotate_extrude works in (horizontal radius, z). The peak roots in the
     // shell wall at brow height, where the shell's horizontal radius is far
@@ -73,7 +57,7 @@ module comm_pods() {
 module helmet() {
     difference() {
         helmet_body() { visor_peak(); comm_pods(); }
-        face_cut();
+        face_cut(face_half_az, face_top_z);
     }
 }
 

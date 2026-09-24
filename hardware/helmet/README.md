@@ -1,9 +1,18 @@
 # Helmets for the Sphero BB-8
 
-Two 3D-printable helmets that drop over the head of the Sphero BB-8 (model
+Three 3D-printable helmets that drop over the head of the Sphero BB-8 (model
 R001), sharing one shell. Parametric OpenSCAD, ready-to-slice STLs, and a set
 of fit-test rings so the one number nobody publishes, the head diameter, can
 be measured on the real droid before a helmet is printed.
+
+**Goggles-up helmet** (`bb8_goggles_up_helmet.scad`): open face, with a pair
+of round goggles pushed up onto the forehead, Copilot style, and their strap
+running round the back of the helmet. The lens floors are recessed inside
+the frames: paint them dark, or do a colour swap at that layer.
+
+| Front | Side | Rear |
+|---|---|---|
+| ![](preview/goggles_up_front.png) | ![](preview/goggles_up_side.png) | ![](preview/goggles_up_rear.png) |
 
 **Goggle helmet** (`bb8_goggle_helmet.scad`): a smooth closed dome with one
 wide, thick-rimmed goggle window across the face, after the GitHub Copilot
@@ -27,12 +36,13 @@ drooping visor peak, side comm-pods.
 |---|---|
 | `bb8_dimensions.scad` | Every droid measurement, plus a mock head and body used by the previews |
 | `helmet_common.scad` | The shell, antenna slot and grip bumps shared by both helmets, with their parameters |
+| `bb8_goggles_up_helmet.scad` | The goggles-up helmet; goggle and strap parameters at the top |
 | `bb8_goggle_helmet.scad` | The goggle helmet; window and bezel parameters at the top |
 | `goggle_lens.scad` | The clear lens for the goggle helmet, laid out for printing |
 | `bb8_pilot_helmet.scad` | The pilot helmet; face, visor and pod parameters at the top |
 | `fit_rings.scad` | Six rings, 43 to 48 mm, to find the real head diameter |
 | `head_reference.scad` | The mock head alone, printable as a stand-in for test fitting |
-| `assembly.scad`, `assembly_goggle.scad` | Preview only: each helmet on head on body |
+| `assembly.scad`, `assembly_goggle.scad`, `assembly_goggles_up.scad` | Preview only: each helmet on head on body |
 | `stl/` | Exported meshes, watertight, millimetres |
 | `preview/` | Renders of the above |
 | `Makefile` | `make` regenerates `stl/` and `preview/` from the sources |
@@ -87,10 +97,10 @@ place.
 
 | Setting | Value |
 |---|---|
-| Material | PLA or PETG; the goggle helmet weighs ~7.3 g in PLA, the pilot helmet ~6.7 g, the lens ~1 g |
+| Material | PLA or PETG; the helmets weigh 6.7 to 7.3 g in PLA, the clear lens ~1 g |
 | Layer height | 0.12 to 0.16 mm |
 | Perimeters | 4 (the 1.6 mm wall is all perimeter, no infill) |
-| Supports | None needed for either helmet. The visor peak droops at 35°, the comm-pods are domed, and the goggle bezel's underside arc is only 2.4 mm wide. The last few millimetres of the crown are steep; a brim and slow cooling handle it, or add a small tree support if your printer struggles |
+| Supports | None needed for any of the helmets. The goggles-up frames and strap stand at most 2.2 mm proud. The visor peak droops at 35°, the comm-pods are domed, and the goggle bezel's underside arc is only 2.4 mm wide. The last few millimetres of the crown are steep; a brim and slow cooling handle it, or add a small tree support if your printer struggles |
 | Orientation | Rim down |
 
 The head is held on the ball by magnets and balances on wheels, so keep the
@@ -124,6 +134,15 @@ Goggle helmet, in `bb8_goggle_helmet.scad`:
 | `win_el`, `win_az` | 17°, 6° | Window centre; nudged toward the small lens |
 | `bezel_w`, `bezel_h` | 2.4 mm, 3.5 mm | Frame width and height above the shell |
 | `lens_t`, `lens_lip`, `lens_gap` | 1.0, 1.0, 0.15 mm | Lens thickness, overlap into the bezel, play |
+
+Goggles-up helmet, in `bb8_goggles_up_helmet.scad`:
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `face_half_az`, `face_top_z` | 56°, 18.5 | Face opening, as for the pilot helmet |
+| `goggle_el`, `lens_az` | 62°, ±28° | Where the two lenses sit on the forehead |
+| `lens_od`, `lens_id`, `frame_h`, `floor_h` | 11, 8.5, 2.2, 1.2 mm | Lens frame size, height, and recessed floor |
+| `strap_w`, `strap_h`, `strap_tilt` | 5 mm, 1 mm, 22° | Strap band width, height, and how far it drops toward the back |
 
 Pilot helmet, in `bb8_pilot_helmet.scad`:
 
