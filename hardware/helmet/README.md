@@ -1,11 +1,21 @@
-# Pilot helmet for the Sphero BB-8
+# Helmets for the Sphero BB-8
 
-A 3D-printable Rebel-pilot style helmet that drops over the head of the
-Sphero BB-8 (model R001). Parametric OpenSCAD, ready-to-slice STLs, and a set
+Two 3D-printable helmets that drop over the head of the Sphero BB-8 (model
+R001), sharing one shell. Parametric OpenSCAD, ready-to-slice STLs, and a set
 of fit-test rings so the one number nobody publishes, the head diameter, can
-be measured on the real droid before the helmet is printed.
+be measured on the real droid before a helmet is printed.
 
-![Helmet on the droid](preview/assembly_front.png)
+**Goggle helmet** (`bb8_goggle_helmet.scad`): a smooth closed dome with one
+wide, thick-rimmed goggle window across the face, after the GitHub Copilot
+mark. Both the big eye and the small lens show through the single window.
+An optional clear lens seats in the bezel.
+
+| Front | Straight on | Side |
+|---|---|---|
+| ![](preview/goggle_front.png) | ![](preview/goggle_straight.png) | ![](preview/goggle_side.png) |
+
+**Pilot helmet** (`bb8_pilot_helmet.scad`): Rebel-pilot style, open face,
+drooping visor peak, side comm-pods.
 
 | Front | Rear (antenna slot) | Side |
 |---|---|---|
@@ -16,10 +26,13 @@ be measured on the real droid before the helmet is printed.
 | File | What it is |
 |---|---|
 | `bb8_dimensions.scad` | Every droid measurement, plus a mock head and body used by the previews |
-| `bb8_pilot_helmet.scad` | The helmet. All helmet parameters are at the top of the file |
+| `helmet_common.scad` | The shell, antenna slot and grip bumps shared by both helmets, with their parameters |
+| `bb8_goggle_helmet.scad` | The goggle helmet; window and bezel parameters at the top |
+| `goggle_lens.scad` | The clear lens for the goggle helmet, laid out for printing |
+| `bb8_pilot_helmet.scad` | The pilot helmet; face, visor and pod parameters at the top |
 | `fit_rings.scad` | Six rings, 43 to 48 mm, to find the real head diameter |
 | `head_reference.scad` | The mock head alone, printable as a stand-in for test fitting |
-| `assembly.scad` | Preview only: helmet on head on body |
+| `assembly.scad`, `assembly_goggle.scad` | Preview only: each helmet on head on body |
 | `stl/` | Exported meshes, watertight, millimetres |
 | `preview/` | Renders of the above |
 | `Makefile` | `make` regenerates `stl/` and `preview/` from the sources |
@@ -53,9 +66,15 @@ Sphero's own 73 / 114 mm figures are used here.
 2. **Set `head_d`** in `bb8_dimensions.scad` to that ring's inner diameter
    minus 0.5 mm. If the head is clearly taller or shorter than 27 mm from the
    silver rim to the top, set `head_h` too.
-3. **Export the helmet**: `make stl/bb8_pilot_helmet.stl`, or open the file in
-   OpenSCAD and press F6 then export.
+3. **Export the helmet**: `make stl`, or open the helmet file in OpenSCAD and
+   press F6 then export.
 4. **Print the helmet** rim-down, open side on the bed.
+5. **Goggle lens, optional**: print `stl/goggle_lens.stl` in transparent
+   PETG, dome up, 0.1 mm layers, 100% infill, slow, with supports under the
+   dome. It drops into the rebate in the bezel with 0.15 mm of play; a dab of
+   clear glue holds it. The bezel stands 3.5 mm proud so the lens clears the
+   big eye, which sticks about 4 mm out of the head. Leave the window open if
+   you would rather see the eye directly.
 
 The slot is centred on the antenna pair (`slot_az`, 167°), not on the rear
 centre line, because the pair sits to the left of it. If the antennas foul
@@ -68,10 +87,10 @@ place.
 
 | Setting | Value |
 |---|---|
-| Material | PLA or PETG; the helmet weighs ~6.6 g in PLA |
+| Material | PLA or PETG; the goggle helmet weighs ~7.3 g in PLA, the pilot helmet ~6.7 g, the lens ~1 g |
 | Layer height | 0.12 to 0.16 mm |
 | Perimeters | 4 (the 1.6 mm wall is all perimeter, no infill) |
-| Supports | None needed. The visor droops at 35° and the comm-pods are domed. The last few millimetres of the crown are steep; a brim and slow cooling handle it, or add a small support blocker-free tree support if your printer struggles |
+| Supports | None needed for either helmet. The visor peak droops at 35°, the comm-pods are domed, and the goggle bezel's underside arc is only 2.4 mm wide. The last few millimetres of the crown are steep; a brim and slow cooling handle it, or add a small tree support if your printer struggles |
 | Orientation | Rim down |
 
 The head is held on the ball by magnets and balances on wheels, so keep the
@@ -85,21 +104,35 @@ head (`grip_bumps`). If the helmet still slides when the droid corners, a pea
 of Blu Tack at the crown works and leaves no mark; set `grip_bumps = false`
 if the fit is already tight.
 
-## Helmet parameters
+## Parameters
 
-All at the top of `bb8_pilot_helmet.scad`:
+Shared, in `helmet_common.scad`:
 
 | Parameter | Default | Meaning |
 |---|---|---|
 | `clearance` | 0.8 | Radial air gap between head and shell |
 | `wall` | 1.6 | Shell thickness |
 | `edge_lift` | 0.5 | Helmet edge stops this far above the silver rim |
+| `slot_az`, `slot_w`, `slot_top_el` | 167°, 11 mm, 50° | Antenna slot centre line, width, and how far up the back it runs |
+| `grip_bumps`, `bump_h` | true, 0.3 | Friction bumps inside the rim |
+
+Goggle helmet, in `bb8_goggle_helmet.scad`:
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `win_w`, `win_h` | 33 mm, 22 mm | Window size across and up the face |
+| `win_el`, `win_az` | 17°, 6° | Window centre; nudged toward the small lens |
+| `bezel_w`, `bezel_h` | 2.4 mm, 3.5 mm | Frame width and height above the shell |
+| `lens_t`, `lens_lip`, `lens_gap` | 1.0, 1.0, 0.15 mm | Lens thickness, overlap into the bezel, play |
+
+Pilot helmet, in `bb8_pilot_helmet.scad`:
+
+| Parameter | Default | Meaning |
+|---|---|---|
 | `face_half_az` | 58° | Half-width of the face opening |
 | `face_top_z` | 18.5 | Brow line height above the head's sphere centre; must clear the big eye |
 | `visor_len`, `visor_droop` | 6 mm, 35° | Peak size and downward angle |
-| `slot_az`, `slot_w`, `slot_top_el` | 167°, 11 mm, 50° | Antenna slot centre line, width, and how far up the back it runs |
 | `pod_d`, `pod_proud` | 13 mm, 1.8 mm | Side comm-pods |
-| `grip_bumps`, `bump_h` | true, 0.3 | Friction bumps inside the rim |
 
 Coordinates: origin at the centre of the sphere the head is cut from, +Z up,
 +X toward the big eye. Azimuth 0 is the front, 180 the back.

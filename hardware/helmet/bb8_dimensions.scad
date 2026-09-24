@@ -24,9 +24,11 @@ eye_bulge    = 4;     // how far it stands proud of the dome
 eye_el       = 28;    // elevation above the equator, degrees
 eye_az       = 0;
 
-// Small lens, lower and slightly to one side.
+// Small lens, low on the front and to the droid's left of the big eye. Its
+// bottom edge touches the orange band just above the silver rim.
 lens_d       = 8;
-lens_el      = -2;
+lens_bulge   = 2;
+lens_el      = 3;
 lens_az      = 22;
 
 // Two antennas on the rear slope of the head, one tall and one short, a
@@ -69,7 +71,7 @@ module bb8_head_mock() {
     color("black") on_head(eye_az, eye_el, head_r + eye_bulge - eye_d / 2)
         sphere(d = eye_d, $fn = 48);
     color("black") on_head(lens_az, lens_el, head_r - 1)
-        cylinder(h = 2.5, d = lens_d, $fn = 32);
+        cylinder(h = lens_bulge + 1, d = lens_d, $fn = 32);
     color("black") on_head(antenna_long_az, antenna_long_el, head_r - 1)
         cylinder(h = antenna_long_l + 1, d = antenna_d, $fn = 12);
     color("black") on_head(antenna_short_az, antenna_short_el, head_r - 1)

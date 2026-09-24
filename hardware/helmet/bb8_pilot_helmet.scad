@@ -9,43 +9,24 @@
 // Print it rim-down (open side on the bed). Every overhang is either < 50
 // degrees or the last few millimetres of the crown. See README.md.
 //
-// All head figures come from bb8_dimensions.scad. Check them with
-// fit_rings.scad first: the helmet is only as good as head_d.
+// Shell, slot and bump parameters live in helmet_common.scad; head figures
+// in bb8_dimensions.scad. Check them with fit_rings.scad first: the helmet
+// is only as good as head_d.
 
-include <bb8_dimensions.scad>
+include <helmet_common.scad>
 
-// ---- Helmet parameters ------------------------------------------------------
-clearance     = 0.8;   // radial air gap between head and helmet
-wall          = 1.6;   // shell thickness (4 perimeters at 0.4 mm)
-edge_lift     = 0.5;   // helmet edge stops this far above the head's silver rim
+// ---- Pilot helmet parameters ------------------------------------------------
+face_half_az   = 58;    // half-width of the face opening, degrees
+face_top_z     = 18.5;  // brow line; must clear the top of the big eye
 
-face_half_az  = 58;    // half-width of the face opening, degrees
-face_top_z    = 18.5;  // brow line; must clear the top of the big eye
+visor_len      = 6;     // how far the peak sticks out
+visor_droop    = 35;    // peak angle below horizontal (printable without support)
+visor_t        = 1.6;
+visor_extra_az = 4;     // peak overlaps the face opening edge by this much
 
-visor_len     = 6;     // how far the peak sticks out
-visor_droop   = 35;    // peak angle below horizontal (printable without support)
-visor_t       = 1.6;
-visor_extra_az = 4;    // peak overlaps the face opening edge by this much
-
-slot_az       = 167;   // azimuth of the slot centre line (antennas sit left of dead rear)
-slot_w        = 11;    // antenna slot width; the pair spans ~3.5 mm
-slot_top_el   = 50;    // slot runs from the rim up to this elevation (+ rounded end)
-
-pod_d         = 13;    // side comm-pod diameter
-pod_proud     = 1.8;   // how far the pod stands out
-pod_el        = 6;
-
-grip_bumps    = true;  // small bumps inside the rim for a light friction fit
-bump_d        = 1.6;
-bump_h        = 0.3;   // interference per bump
-bump_az       = [105, 145, 215, 255];
-
-$fn = 96;
-
-// ---- Derived ----------------------------------------------------------------
-r_in     = head_r + clearance;
-r_out    = r_in + wall;
-bottom_z = rim_z + edge_lift;
+pod_d          = 13;    // side comm-pod diameter
+pod_proud      = 1.8;   // how far the pod stands out
+pod_el         = 6;
 
 module wedge(half_az, r) {
     // Solid sector of a cylinder in front (+X), |azimuth| <= half_az.
@@ -63,19 +44,10 @@ module face_cut() {
     }
 }
 
-module antenna_slot_cut() {
-    z_top = r_out * sin(slot_top_el);
-    rotate([0, 0, slot_az - 180]) union() {
-        translate([-100, -slot_w / 2, bottom_z - 1])
-            cube([100, slot_w, z_top - bottom_z + 1]);
-        rotate([0, slot_top_el - 90, 0]) cylinder(h = 100, d = slot_w);
-    }
-}
-
 module visor_peak() {
-    // rotate_extrude works in (horizontal radius, z). The peak has to root in
-    // the shell wall at brow height, where the shell's horizontal radius is
-    // far smaller than r_out, then droop from the outer surface outward.
+    // rotate_extrude works in (horizontal radius, z). The peak roots in the
+    // shell wall at brow height, where the shell's horizontal radius is far
+    // smaller than r_out, then droops from the outer surface outward.
     z0     = face_top_z;
     x_root = sqrt(r_in * r_in - (z0 + visor_t) * (z0 + visor_t));   // inside the wall
     x_surf = sqrt(r_out * r_out - z0 * z0);                          // outer surface at brow
@@ -98,25 +70,10 @@ module comm_pods() {
             scale([1, 1, 0.3]) sphere(d = pod_d, $fn = 48);
 }
 
-module grip_bump_set() {
-    for (az = bump_az)
-        on_head(az, -2, r_in + bump_d / 2 - bump_h) sphere(d = bump_d, $fn = 24);
-}
-
 module helmet() {
-    union() {
-        difference() {
-            union() {
-                sphere(r = r_out);
-                visor_peak();
-                comm_pods();
-            }
-            sphere(r = r_in);
-            translate([-100, -100, bottom_z - 100]) cube([200, 200, 100]);
-            face_cut();
-            antenna_slot_cut();
-        }
-        if (grip_bumps) grip_bump_set();
+    difference() {
+        helmet_body() { visor_peak(); comm_pods(); }
+        face_cut();
     }
 }
 

@@ -74,7 +74,7 @@ something that has to compete with driving.
 
 ## Helmet
 
-`hardware/helmet/` holds a 3D-printable pilot helmet for the droid's head:
+`hardware/helmet/` holds two 3D-printable helmets for the droid's head, a Copilot-style goggle helmet and a pilot helmet:
 parametric OpenSCAD, exported STLs, fit-test rings and the dimension research
 behind them. See [hardware/helmet/README.md](hardware/helmet/README.md).
 
