@@ -6,8 +6,8 @@ of fit-test rings so the one number nobody publishes, the head diameter, can
 be measured on the real droid before a helmet is printed.
 
 **Goggles-up helmet** (`bb8_goggles_up_helmet.scad`): open face, with a pair
-of round goggles pushed up onto the forehead, Copilot style, and their strap
-running round the back of the helmet. The lens floors are recessed inside
+of round goggles pushed up onto the forehead, Copilot style, their strap
+running round the back of the helmet, and domed ear pods on both sides. The lens floors are recessed inside
 the frames: paint them dark, or do a colour swap at that layer.
 
 | Front | Side | Rear |
@@ -124,6 +124,7 @@ Shared, in `helmet_common.scad`:
 | `wall` | 1.6 | Shell thickness |
 | `edge_lift` | 0.5 | Helmet edge stops this far above the silver rim |
 | `slot_az`, `slot_w`, `slot_top_el` | 167°, 11 mm, 50° | Antenna slot centre line, width, and how far up the back it runs |
+| `pod_d`, `pod_proud`, `pod_el` | 13 mm, 1.8 mm, 6° | Side ear pods (pilot and goggles-up helmets) |
 | `grip_bumps`, `bump_h` | true, 0.3 | Friction bumps inside the rim |
 
 Goggle helmet, in `bb8_goggle_helmet.scad`:
@@ -151,7 +152,6 @@ Pilot helmet, in `bb8_pilot_helmet.scad`:
 | `face_half_az` | 58° | Half-width of the face opening |
 | `face_top_z` | 18.5 | Brow line height above the head's sphere centre; must clear the big eye |
 | `visor_len`, `visor_droop` | 6 mm, 35° | Peak size and downward angle |
-| `pod_d`, `pod_proud` | 13 mm, 1.8 mm | Side comm-pods |
 
 Coordinates: origin at the centre of the sphere the head is cut from, +Z up,
 +X toward the big eye. Azimuth 0 is the front, 180 the back.

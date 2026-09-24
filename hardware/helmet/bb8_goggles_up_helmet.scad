@@ -4,6 +4,7 @@
 //   * a pair of round goggle lenses with raised frames and a bridge,
 //     sitting on the forehead just above the brow,
 //   * a strap band that runs from the goggles round the back of the helmet,
+//   * domed ear pods on both sides,
 //   * the antenna slot up the back and grip bumps inside the rim.
 //
 // The lens floors are recessed 1 mm inside the frames: paint them dark, or
@@ -61,7 +62,7 @@ module strap() {
 
 module helmet() {
     difference() {
-        helmet_body() { lens_frames(); bridge(); strap(); }
+        helmet_body() { lens_frames(); bridge(); strap(); ear_pods(); }
         face_cut(face_half_az, face_top_z);
     }
 }

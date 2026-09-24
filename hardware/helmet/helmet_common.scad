@@ -14,6 +14,10 @@ slot_az       = 167;   // azimuth of the antenna slot centre line (the pair sits
 slot_w        = 11;    // antenna slot width; the pair spans ~3.5 mm
 slot_top_el   = 50;    // slot runs from the rim up to this elevation (+ rounded end)
 
+pod_d         = 13;    // side ear-pod diameter
+pod_proud     = 1.8;   // how far each pod stands out
+pod_el        = 6;     // pod elevation above the equator
+
 grip_bumps    = true;  // small bumps inside the rim for a light friction fit
 bump_d        = 1.6;
 bump_h        = 0.3;   // interference per bump
@@ -49,6 +53,13 @@ module antenna_slot_cut() {
 module grip_bump_set() {
     for (az = bump_az)
         on_head(az, -2, r_in + bump_d / 2 - bump_h) sphere(d = bump_d, $fn = 24);
+}
+
+// Domed ear pods on both sides.
+module ear_pods() {
+    for (az = [90, -90])
+        on_head(az, pod_el, r_out - (pod_d * 0.3) / 2 + pod_proud)
+            scale([1, 1, 0.3]) sphere(d = pod_d, $fn = 48);
 }
 
 module wedge(half_az, r) {

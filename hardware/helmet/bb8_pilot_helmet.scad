@@ -4,7 +4,7 @@
 //   * an open face so the big eye and the small lens stay visible,
 //   * a drooping visor peak over the brow,
 //   * a slot up the back, centred on the two antennas,
-//   * side comm-pods, and optional grip bumps inside the rim.
+//   * side ear pods, and optional grip bumps inside the rim.
 //
 // Print it rim-down (open side on the bed). Every overhang is either < 50
 // degrees or the last few millimetres of the crown. See README.md.
@@ -23,10 +23,6 @@ visor_len      = 6;     // how far the peak sticks out
 visor_droop    = 35;    // peak angle below horizontal (printable without support)
 visor_t        = 1.6;
 visor_extra_az = 4;     // peak overlaps the face opening edge by this much
-
-pod_d          = 13;    // side comm-pod diameter
-pod_proud      = 1.8;   // how far the pod stands out
-pod_el         = 6;
 
 module visor_peak() {
     // rotate_extrude works in (horizontal radius, z). The peak roots in the
@@ -48,15 +44,9 @@ module visor_peak() {
         ]);
 }
 
-module comm_pods() {
-    for (az = [90, -90])
-        on_head(az, pod_el, r_out - (pod_d * 0.3) / 2 + pod_proud)
-            scale([1, 1, 0.3]) sphere(d = pod_d, $fn = 48);
-}
-
 module helmet() {
     difference() {
-        helmet_body() { visor_peak(); comm_pods(); }
+        helmet_body() { visor_peak(); ear_pods(); }
         face_cut(face_half_az, face_top_z);
     }
 }
