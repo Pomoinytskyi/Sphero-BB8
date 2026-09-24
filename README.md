@@ -72,6 +72,12 @@ measures 59.8 ms, that constant almost exactly. Switching to write-without-respo
 is a 5.3x throughput gain, which makes the planned iOS light show free rather than
 something that has to compete with driving.
 
+## Helmet
+
+`hardware/helmet/` holds a 3D-printable pilot helmet for the droid's head:
+parametric OpenSCAD, exported STLs, fit-test rings and the dimension research
+behind them. See [hardware/helmet/README.md](hardware/helmet/README.md).
+
 ## Quick start
 
 ```bash
