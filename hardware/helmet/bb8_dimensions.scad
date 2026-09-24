@@ -29,16 +29,18 @@ lens_d       = 8;
 lens_el      = -2;
 lens_az      = 22;
 
-// Two antennas on the rear slope of the head, one tall and one short.
-// Positions are estimated from the product photos: both are behind the crown,
-// spread a few millimetres either side of the rear centre line.
+// Two antennas on the rear slope of the head, one tall and one short, a
+// close pair about 3 mm apart. From the plan-view photo of the bare head:
+// they root just outside the orange band, low on the dome (elevation ~30
+// degrees), and 12 to 15 degrees toward the droid's left of the rear centre
+// line. The tall one is nearer the side, the short one nearer the centre.
 antenna_d        = 1.3;
 antenna_long_l   = 16;
-antenna_long_el  = 55;
-antenna_long_az  = 172;
+antenna_long_el  = 30;
+antenna_long_az  = 163;
 antenna_short_l  = 8;
-antenna_short_el = 58;
-antenna_short_az = 190;
+antenna_short_el = 30;
+antenna_short_az = 171;
 
 // Derived.
 head_r   = head_d / 2;

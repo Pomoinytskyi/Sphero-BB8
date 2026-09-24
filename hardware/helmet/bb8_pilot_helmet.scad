@@ -3,7 +3,7 @@
 // A thin spherical shell that drops over the head dome, with:
 //   * an open face so the big eye and the small lens stay visible,
 //   * a drooping visor peak over the brow,
-//   * a slot up the back for the two antennas,
+//   * a slot up the back, centred on the two antennas,
 //   * side comm-pods, and optional grip bumps inside the rim.
 //
 // Print it rim-down (open side on the bed). Every overhang is either < 50
@@ -27,8 +27,9 @@ visor_droop   = 35;    // peak angle below horizontal (printable without support
 visor_t       = 1.6;
 visor_extra_az = 4;    // peak overlaps the face opening edge by this much
 
-slot_w        = 10;    // antenna slot width
-slot_top_el   = 70;    // slot runs from the rim up to this elevation (+ rounded end)
+slot_az       = 167;   // azimuth of the slot centre line (antennas sit left of dead rear)
+slot_w        = 11;    // antenna slot width; the pair spans ~3.5 mm
+slot_top_el   = 50;    // slot runs from the rim up to this elevation (+ rounded end)
 
 pod_d         = 13;    // side comm-pod diameter
 pod_proud     = 1.8;   // how far the pod stands out
@@ -64,7 +65,7 @@ module face_cut() {
 
 module antenna_slot_cut() {
     z_top = r_out * sin(slot_top_el);
-    union() {
+    rotate([0, 0, slot_az - 180]) union() {
         translate([-100, -slot_w / 2, bottom_z - 1])
             cube([100, slot_w, z_top - bottom_z + 1]);
         rotate([0, slot_top_el - 90, 0]) cylinder(h = 100, d = slot_w);

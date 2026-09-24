@@ -37,7 +37,7 @@ derivation is written next to each number in `bb8_dimensions.scad`.
 | Head dome sphere diameter | **45 mm, estimated** | Movie ratio 0.58 ([rimstar.org](https://rimstar.org/science_electronics_projects/bb-8_dimensions.htm)) gives 42; the supplied photo gives ~0.62 after perspective, 45 |
 | Head height, rim to crown | **27 mm, estimated** | 114 − 73 ball − 2 air gap − ~12 antenna above the crown |
 | Head rim diameter | 44.1 mm, derived | From the two figures above; the rim sits below the equator |
-| Antennas | Two, on the rear slope: ~16 mm and ~8 mm | Product photos; positions are estimates |
+| Antennas | Two, a close pair ~16 mm and ~8 mm, elevation ~30°, 12 to 15° left of dead rear | Plan-view and rear photos of the bare head |
 
 The two bold figures are ±2 mm guesses and they set the fit. That is what
 `fit_rings.scad` is for. Older reviews quote 70 mm for the ball and 90 mm
@@ -57,8 +57,9 @@ Sphero's own 73 / 114 mm figures are used here.
    OpenSCAD and press F6 then export.
 4. **Print the helmet** rim-down, open side on the bed.
 
-If the antennas foul the slot, widen `slot_w` (default 10 mm) or raise
-`slot_top_el` (default 70°). To fit the head into the helmet, go in
+The slot is centred on the antenna pair (`slot_az`, 167°), not on the rear
+centre line, because the pair sits to the left of it. If the antennas foul
+the slot, widen `slot_w` (default 11 mm) or swing `slot_az`. To fit the head into the helmet, go in
 face-first with the head tilted back so the antennas ride up the slot, then
 level it. The head lifts off the ball, which makes this easier than doing it in
 place.
@@ -96,7 +97,7 @@ All at the top of `bb8_pilot_helmet.scad`:
 | `face_half_az` | 58° | Half-width of the face opening |
 | `face_top_z` | 18.5 | Brow line height above the head's sphere centre; must clear the big eye |
 | `visor_len`, `visor_droop` | 6 mm, 35° | Peak size and downward angle |
-| `slot_w`, `slot_top_el` | 10 mm, 70° | Antenna slot width and how far up the back it runs |
+| `slot_az`, `slot_w`, `slot_top_el` | 167°, 11 mm, 50° | Antenna slot centre line, width, and how far up the back it runs |
 | `pod_d`, `pod_proud` | 13 mm, 1.8 mm | Side comm-pods |
 | `grip_bumps`, `bump_h` | true, 0.3 | Friction bumps inside the rim |
 

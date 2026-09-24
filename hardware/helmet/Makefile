@@ -28,7 +28,7 @@ preview/assembly_top.png: assembly.scad bb8_pilot_helmet.scad bb8_dimensions.sca
 preview/helmet_alone.png: bb8_pilot_helmet.scad bb8_dimensions.scad
 	$(RENDER) --camera=150,-110,80,0,0,8 -o $@ $<
 preview/fit_rings.png: fit_rings.scad
-	$(RENDER) --imgsize=1000,700 --camera=56,-150,200,56,28,0 -o $@ $<
+	$(RENDER) --camera=56,-150,200,56,28,0 -o $@ $<
 
 clean:
 	rm -rf stl preview
